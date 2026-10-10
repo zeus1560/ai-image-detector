@@ -1,0 +1,26 @@
+# 데이터셋 (용량이 커서 Git에 올리지 않음)
+data/
+*.zip
+*.tar
+*.tar.gz
+
+# 학습된 모델 가중치
+*.pt
+*.pth
+*.h5
+*.ckpt
+checkpoints/
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# Spyder
+.spyproject/
+
+# OS
+.DS_Store
+Thumbs.db
