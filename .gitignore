@@ -18,8 +18,12 @@ __pycache__/
 .venv/
 venv/
 
-# Spyder
+# 에디터
 .spyproject/
+.vscode/
+
+# 비밀 정보 (API 키, 토큰)
+.env
 
 # OS
 .DS_Store
