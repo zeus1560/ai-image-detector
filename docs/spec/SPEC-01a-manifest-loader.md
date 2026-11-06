@@ -1,6 +1,6 @@
 # SPEC-01a: manifest 로더와 검증
 
-- 상태: 확정
+- 상태: 구현 완료
 - 담당: 안승주
 - 관련 결정·실험: docs/spec/data-contract.md, DECISIONS.md "SPEC-01 분리"(추가 예정)
 
@@ -58,17 +58,17 @@ split 간 origin_id 겹침을 학습 전에 자동으로 차단해서, 핵심 �
 - transform은 외부에서 넘겨받는다. 정규화와 입력 크기는 정하지 않는다.
 
 ## 완료 기준
-- [ ] 정상 manifest로 validate를 통과하고, 로그에 "split 겹침 origin_id 0개"가 출력된다
-- [ ] 같은 origin_id를 train과 test에 넣은 manifest를 주면 LeakageError가 나고 Dataset이 생성되지 않는다
-- [ ] train만 필터해서 Dataset을 만들어도, 전체 manifest에 겹침이 있으면 LeakageError가 난다
-- [ ] 필수 열 하나를 뺀 manifest를 주면 빠진 열 이름이 담긴 에러가 난다
-- [ ] origin_id 내 label 불일치, kakao 출처의 train 배정이 각각 ManifestValidationError로 잡히고, LeakageError는 아니다
-- [ ] split 겹침과 label 불일치를 함께 넣은 manifest를 주면, LeakageError 하나가 나고 메시지에 두 위반이 모두 나온다
-- [ ] 존재하지 않는 path가 있으면 check_files="all"에서 ManifestValidationError(LeakageError 아님)가 나고, 해당 path가 출력된다
-- [ ] check_files=n이면 정확히 n개만 검사하고, 로그에 샘플 검사임이 표시된다
-- [ ] filter 결과 장수가 summary 표의 해당 칸과 같다
-- [ ] Dataset[i]가 (이미지, label, 행 인덱스)를 반환하고, label=real 행은 0, fake 행은 1이다
-- [ ] 위 항목이 모두 src/model/tests/의 pytest로 로컬 CPU에서 통과한다
+- [x] 정상 manifest로 validate를 통과하고, 로그에 "split 겹침 origin_id 0개"가 출력된다
+- [x] 같은 origin_id를 train과 test에 넣은 manifest를 주면 LeakageError가 나고 Dataset이 생성되지 않는다
+- [x] train만 필터해서 Dataset을 만들어도, 전체 manifest에 겹침이 있으면 LeakageError가 난다
+- [x] 필수 열 하나를 뺀 manifest를 주면 빠진 열 이름이 담긴 에러가 난다
+- [x] origin_id 내 label 불일치, kakao 출처의 train 배정이 각각 ManifestValidationError로 잡히고, LeakageError는 아니다
+- [x] split 겹침과 label 불일치를 함께 넣은 manifest를 주면, LeakageError 하나가 나고 메시지에 두 위반이 모두 나온다
+- [x] 존재하지 않는 path가 있으면 check_files="all"에서 ManifestValidationError(LeakageError 아님)가 나고, 해당 path가 출력된다
+- [x] check_files=n이면 정확히 n개만 검사하고, 로그에 샘플 검사임이 표시된다
+- [x] filter 결과 장수가 summary 표의 해당 칸과 같다
+- [x] Dataset[i]가 (이미지, label, 행 인덱스)를 반환하고, label=real 행은 0, fake 행은 1이다
+- [x] 위 항목이 모두 src/model/tests/의 pytest로 로컬 CPU에서 통과한다
 
 ## 테스트 방법
 - 로컬 CPU: 테스트 안에서 임시 폴더에 8×8 크기의 가짜 이미지 몇 장과 작은 manifest CSV를 만들어 위 완료 기준을 확인한다.
