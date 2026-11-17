@@ -46,7 +46,8 @@
 6. 다 끝나면 상태를 "구현 완료"로 바꾸고, 실험이면 `docs/experiments/`에 결과를 기록한다.
 
 예정된 스펙 (순서대로):
-- SPEC-01 manifest 데이터 로더 (CIFAKE를 데이터 계약 형식으로 감싸기, split 겹침 검사)
+- SPEC-01a manifest 로더와 검증 (split 겹침 검사) — 구현 완료
+- SPEC-01b CIFAKE manifest 만들기 (cifake_manifest.csv)
 - SPEC-02 베이스라인 학습
 - SPEC-03 조건별 평가 (정확도, 실제 사진 오탐률, 생성 이미지 미탐률)
 - SPEC-04 압축 증강 재학습
