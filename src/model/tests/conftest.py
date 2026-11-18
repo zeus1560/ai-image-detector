@@ -32,6 +32,7 @@ def make_row(origin_id, label, split, source="cifake", condition="original", fmt
         "width": "8",
         "height": "8",
         "format": fmt,
+        "color_mode": "RGB",
     }
 
 

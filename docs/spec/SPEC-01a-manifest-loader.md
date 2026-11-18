@@ -1,6 +1,6 @@
 # SPEC-01a: manifest 로더와 검증
 
-- 상태: 확정 (v2)
+- 상태: 구현 완료 (v2)
 - 담당: 안승주
 - 관련 결정·실험: docs/spec/data-contract.md, DECISIONS.md "SPEC-01 분리", "manifest 운영", "색상 모드"
 
@@ -76,11 +76,11 @@ split 간 origin_id 겹침을 학습 전에 자동으로 차단해서, 핵심 �
 - [x] filter 결과 장수가 summary 표의 해당 칸과 같다
 - [x] Dataset[i]가 (이미지, label, 행 인덱스)를 반환하고, label=real 행은 0, fake 행은 1이다
 - [x] 위 항목이 모두 src/model/tests/의 pytest로 로컬 CPU에서 통과한다
-- [ ] color_mode 열을 뺀 manifest를 주면 "color_mode"가 담긴 에러가 난다
-- [ ] color_mode에 허용값 밖의 값(예: RGBA)이 있으면 열 이름과 줄 번호가 담긴 에러가 난다
-- [ ] load_manifest가 출력하는 sha256이 hashlib로 따로 계산한 파일 해시와 같고, 파일을 1바이트만 바꿔도 값이 달라진다
-- [ ] ManifestDataset.manifest_sha256이 load_manifest가 출력한 값과 같다
-- [ ] v1의 기존 테스트가 모두 그대로 통과한다 (테스트용 manifest에 color_mode 열 추가 외에는 변경 없이)
+- [x] color_mode 열을 뺀 manifest를 주면 "color_mode"가 담긴 에러가 난다
+- [x] color_mode에 허용값 밖의 값(예: RGBA)이 있으면 열 이름과 줄 번호가 담긴 에러가 난다
+- [x] load_manifest가 출력하는 sha256이 hashlib로 따로 계산한 파일 해시와 같고, 파일을 1바이트만 바꿔도 값이 달라진다
+- [x] ManifestDataset.manifest_sha256이 load_manifest가 출력한 값과 같다
+- [x] v1의 기존 테스트가 모두 그대로 통과한다 (테스트용 manifest에 color_mode 열 추가 외에는 변경 없이)
 
 ## 테스트 방법
 - 로컬 CPU: 테스트 안에서 임시 폴더에 8×8 크기의 가짜 이미지 몇 장과 작은 manifest CSV를 만들어 위 완료 기준을 확인한다.
@@ -98,4 +98,4 @@ split 간 origin_id 겹침을 학습 전에 자동으로 차단해서, 핵심 �
 
 ## 변경 이력
 - v1 (a1fcc20 확정, 95365bb 구현 완료): 최초 버전
-- v2: color_mode 열 추가, manifest 해시 출력 추가 (9주차 회의 후속)
+- v2 (2e67b1b 확정, 구현 완료): color_mode 열 추가, manifest 해시 출력 추가 (9주차 회의 후속)

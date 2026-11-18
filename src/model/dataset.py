@@ -44,6 +44,8 @@ class ManifestDataset:
         full = mf.load_manifest(manifest_path, data_root)
         # 필터 전 전체 manifest를 검사해야 split 간 겹침을 발견할 수 있다
         mf.validate(full, data_root, check_files=check_files)
+        # 읽은 manifest의 해시 (SPEC-02에서 실험 기록에 남길 때 사용)
+        self.manifest_sha256 = full.attrs["manifest_sha256"]
         self.df = mf.filter(full, source=source, condition=condition, split=split)
         self.transform = transform
 

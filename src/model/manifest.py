@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
 import random
 import warnings
 from pathlib import Path
@@ -23,12 +25,15 @@ REQUIRED_COLUMNS = [
     "width",
     "height",
     "format",
+    "color_mode",
 ]
 
 ALLOWED_VALUES = {
     "label": {"real", "fake"},
     "split": {"train", "val", "test"},
     "source": {"cifake", "genimage", "kakao", "latest"},
+    # 변환 전 원본의 PIL 모드. 저장 파일은 모두 RGB (data-contract.md)
+    "color_mode": {"RGB", "L", "CMYK"},
 }
 
 # kakao, latest 출처는 test 전용 (data-contract.md 규칙 4)
@@ -54,13 +59,27 @@ def _csv_line(index: int) -> int:
     return int(index) + 2
 
 
-def load_manifest(path, data_root) -> pd.DataFrame:
-    """manifest CSV를 읽고 필수 열과 허용값(label, split, source)을 확인한다.
+def manifest_sha256(path) -> str:
+    """manifest 파일 바이트 전체의 sha256 값(16진수 문자열)을 반환한다.
 
-    모든 값은 문자열로 읽는다 (origin_id 등이 숫자로 바뀌지 않게).
-    data_root는 df.attrs["data_root"]에 기록해 둔다.
+    출력된 해시를 data/manifests/manifest_vN.csv 스냅샷과 대조해
+    실험에 쓴 manifest 버전을 확인하는 데 쓴다.
     """
-    df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def load_manifest(path, data_root) -> pd.DataFrame:
+    """manifest CSV를 읽고 필수 열과 허용값(label, split, source, color_mode)을 확인한다.
+
+    읽을 때 manifest 경로, 행 수, 파일의 sha256 해시를 출력한다.
+    모든 값은 문자열로 읽는다 (origin_id 등이 숫자로 바뀌지 않게).
+    data_root는 df.attrs["data_root"]에, 해시는 df.attrs["manifest_sha256"]에 기록해 둔다.
+    """
+    # 바이트를 한 번만 읽어, 해시를 계산한 바로 그 내용을 파싱한다
+    raw = Path(path).read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    df = pd.read_csv(io.BytesIO(raw), dtype=str, keep_default_na=False)
+    print(f"manifest 읽기: {path} (행 {len(df)}개, sha256={digest})")
 
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
     if missing:
@@ -86,6 +105,7 @@ def load_manifest(path, data_root) -> pd.DataFrame:
         )
 
     df.attrs["data_root"] = str(data_root)
+    df.attrs["manifest_sha256"] = digest
     return df
 
 
