@@ -50,20 +50,20 @@ CIFAKE는 파이프라인 확인용이며 압축 실험에는 쓰지 않는다.
 
 ## 완료 기준
 ### A. 미니 폴더 pytest (로컬 CPU)
-- [ ] "0000 (10).jpg" → 번호 0·순번 10, "0000.jpg" → 순번 1, "0 (2).jpg" → 번호 0·순번 2로 해석한다
-- [ ] REAL과 FAKE에 같은 파일 이름이 있어도 origin_id가 서로 다르다
-- [ ] 규칙에 맞지 않는 파일 이름이 있으면 에러가 나고 그 이름이 출력된다
-- [ ] origin_id가 중복되는 입력이면 에러가 난다
-- [ ] 복사된 파일이 원본과 바이트 단위로 같다
-- [ ] 같은 seed로 두 번 실행하면 split 열이 완전히 같다
-- [ ] 결과 manifest가 SPEC-01a validate를 통과한다
+- [x] "0000 (10).jpg" → 번호 0·순번 10, "0000.jpg" → 순번 1, "0 (2).jpg" → 번호 0·순번 2로 해석한다
+- [x] REAL과 FAKE에 같은 파일 이름이 있어도 origin_id가 서로 다르다
+- [x] 규칙에 맞지 않는 파일 이름이 있으면 에러가 나고 그 이름이 출력된다
+- [x] origin_id가 중복되는 입력이면 에러가 난다
+- [x] 복사된 파일이 원본과 바이트 단위로 같다
+- [x] 같은 seed로 두 번 실행하면 split 열이 완전히 같다
+- [x] 결과 manifest가 SPEC-01a validate를 통과한다
 
 ### B. 실제 CIFAKE 로컬 실행
-- [ ] manifest 행 수가 120,000이고 원본 파일 수와 같다
-- [ ] label × split 장수가 train 40,000/40,000, val 10,000/10,000, test 10,000/10,000이다
-- [ ] validate 결과에 "split 겹침 origin_id 0개"와 manifest 해시가 출력된다
-- [ ] summary에서 포맷·크기 분포 경고가 나오지 않는다
-- [ ] color_mode, width, height 분포가 전수 기준으로 출력된다
+- [x] manifest 행 수가 120,000이고 원본 파일 수와 같다
+- [x] label × split 장수가 train 40,000/40,000, val 10,000/10,000, test 10,000/10,000이다
+- [x] validate 결과에 "split 겹침 origin_id 0개"와 manifest 해시가 출력된다
+- [x] summary에서 포맷·크기 분포 경고가 나오지 않는다
+- [x] color_mode, width, height 분포가 전수 기준으로 출력된다
 
 ### C. Colab 실행 (Drive 업로드 후)
 - [ ] zip을 /content에 풀고 ManifestDataset과 PyTorch DataLoader로 배치 하나를 꺼낸다
