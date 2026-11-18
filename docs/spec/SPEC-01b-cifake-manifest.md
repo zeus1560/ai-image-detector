@@ -1,6 +1,6 @@
 # SPEC-01b: CIFAKE manifest 만들기
 
-- 상태: 확정
+- 상태: 구현 완료 (Colab 확인 대기)
 - 담당: 안승주
 - 관련 결정·실험: docs/spec/data-contract.md, DECISIONS.md "CIFAKE의 역할", "manifest 운영", "SPEC-01 분리", SPEC-01a
 
@@ -90,3 +90,14 @@ A·B가 끝나고 C만 남으면 상태를 "구현 완료 (Colab 확인 대기)"
 ## 미해결
 1. Drive 업로드 방법: data/images/cifake/와 data/cifake_manifest.csv에 쓸 편집 권한을 받을지,
    zip을 이상진님께 전달해 올려달라고 할지 (C 묶음만 영향)
+
+## 구현 중 추가 사항 (2026-11-18, 스펙 요구사항 변경 없음)
+- build()에 테스트용 인자 val_per_label 추가. 명령행 실행은 기본값 10,000 고정.
+- 출력 폴더가 원본 폴더와 같거나 서로 포함 관계이면 에러.
+- 로그에 원본 파일 수와 manifest 행 수 일치 여부 출력.
+
+## 실행 결과 (B)
+- manifest: C:\data\cifake_out\cifake_manifest.csv
+- sha256: 79e176eeb61bb024e6ffbc5163b5c84fa02f23daf74b9e39c2427086bcb3740c
+- 행 120,000 / split 겹침 0 / 없는 파일 0
+- 실행 로그: C:\data\cifake_out\spec01b_build_log.txt (레포 밖)
