@@ -77,8 +77,9 @@ A·B가 끝나고 C만 남으면 상태를 "구현 완료 (Colab 확인 대기)"
 - Colab: 업로드 후 C를 확인한다.
 
 ## 알려진 한계
-- CIFAKE의 실제 사진은 CIFAR-10에서 왔고, CIFAR-10은 test 이미지 일부가 train에 거의 같은 이미지로 들어 있다고 알려져 있다.
-  파일이 서로 달라 origin_id 검사로는 잡히지 않는다. CIFAKE는 파이프라인 확인용이므로 고치지 않고 한계로 기록한다.
+- CIFAKE의 실제 사진은 CIFAR-10에서 왔고, CIFAR-10 test의 3.25%(325장, train과 중복 286 + test 내부 중복 39)가 근접 중복이다
+  (Barz & Denzler, J. Imaging 2020, ciFAIR). 파일이 서로 달라 origin_id 검사로는 잡히지 않는다.
+  CIFAKE는 파이프라인 확인용이므로 고치지 않고 한계로 기록한다 (DECISIONS.md "CIFAKE 알려진 한계").
 - FAKE만 512px → 32px 바이리니어 축소를 거쳤다. 모델이 생성 흔적이 아니라 축소 흔적으로 구분할 수 있으므로,
   CIFAKE 결과는 압축 강건성이나 생성 흔적 탐지의 근거로 쓰지 않는다 (DECISIONS.md "CIFAKE의 역할"과 같은 이유).
 
