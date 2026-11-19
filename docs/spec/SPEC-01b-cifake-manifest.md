@@ -1,6 +1,6 @@
 # SPEC-01b: CIFAKE manifest 만들기
 
-- 상태: 구현 완료 (Colab 확인 대기)
+- 상태: 구현 완료
 - 담당: 안승주
 - 관련 결정·실험: docs/spec/data-contract.md, DECISIONS.md "CIFAKE의 역할", "manifest 운영", "SPEC-01 분리", SPEC-01a
 
@@ -66,7 +66,7 @@ CIFAKE는 파이프라인 확인용이며 압축 실험에는 쓰지 않는다.
 - [x] color_mode, width, height 분포가 전수 기준으로 출력된다
 
 ### C. Colab 실행 (Drive 업로드 후)
-- [ ] zip을 /content에 풀고 ManifestDataset과 PyTorch DataLoader로 배치 하나를 꺼낸다
+- [x] zip을 /content에 풀고 ManifestDataset과 PyTorch DataLoader로 배치 하나를 꺼낸다
       (ToTensor 기준 이미지 크기 (배치, 3, 32, 32), label은 0과 1만 있음)
 
 A·B가 끝나고 C만 남으면 상태를 "구현 완료 (Colab 확인 대기)"로 둔다.
@@ -102,3 +102,13 @@ A·B가 끝나고 C만 남으면 상태를 "구현 완료 (Colab 확인 대기)"
 - sha256: 79e176eeb61bb024e6ffbc5163b5c84fa02f23daf74b9e39c2427086bcb3740c
 - 행 120,000 / split 겹침 0 / 없는 파일 0
 - 실행 로그: C:\data\cifake_out\spec01b_build_log.txt (레포 밖)
+
+## Colab 확인 결과 (C, 2026-11-20)
+- 코드: 7d39f41 / 실행: Colab(브라우저), 확인 셀은 레포 밖
+- 입력: cifake.zip (133,195,351 B, sha256 cde8714fbe847e9b670be15b5b42a37b6b87f3f5481efc3032b0445351c54567),
+  cifake_manifest.csv (ds.manifest_sha256 79e176eeb61bb024e6ffbc5163b5c84fa02f23daf74b9e39c2427086bcb3740c)
+- /content/data에 unzip: 이미지 120,000개
+- ManifestDataset validate 통과: split 겹침 0, label 불일치 0, 없는 파일 0
+- split×label: train 40,000/40,000, val 10,000/10,000, test 10,000/10,000 (real/fake)
+- DataLoader 배치: (64, 3, 32, 32), label {0, 1}, torch.int64
+- 소요 시간: Drive→/content 복사 6.3s(첫 실행), unzip 12.6s·18.0s(두 번 실행)
