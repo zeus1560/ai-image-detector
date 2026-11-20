@@ -74,3 +74,52 @@ def eval_crop(image, crop_size, path=None):
         return image
     x, y = eval_crop_origin(image.width, image.height, crop_size, path)
     return _crop(image, x, y, crop_size)
+
+
+CROP_MODES = ("train", "eval")
+
+
+class CropWrapper:
+    """ManifestDataset을 감싸 크롭과 텐서 변환을 적용한다 (SPEC-02 확정 후 보완 2-1).
+
+    ManifestDataset의 transform은 PIL 이미지만 받아 epoch·row_index를 쓸 수 없으므로,
+    train.py는 ManifestDataset을 transform=None으로 만들고 이 클래스로 감싼다.
+
+    Args:
+        dataset: (PIL 이미지, label, row_index)를 돌려주고 df(path 열 포함, 인덱스 = row_index)를 가진 Dataset
+        crop_size: 크롭 크기 (None이면 크롭하지 않음)
+        mode: "train"(train_crop) 또는 "eval"(eval_crop)
+        seed: 학습 크롭 난수 seed
+        to_tensor: 크롭된 PIL 이미지를 받아 변환하는 함수 (train.py가 ToTensor + Normalize를 넣는다)
+
+    mode="train"은 set_epoch(epoch)를 부른 뒤에만 꺼낼 수 있다 (epoch 기본값으로 조용히 도는 것을 막기 위함).
+    DataLoader는 persistent_workers=False로 써야 한다. True면 워커가 첫 epoch 때 복사한 epoch 값을 계속 쓴다.
+    """
+
+    def __init__(self, dataset, crop_size, mode: str, seed: int, to_tensor):
+        if mode not in CROP_MODES:
+            raise ValueError(f"mode는 {CROP_MODES} 중 하나여야 합니다: {mode!r}")
+        self.dataset = dataset
+        self.crop_size = crop_size
+        self.mode = mode
+        self.seed = seed
+        self.to_tensor = to_tensor
+        self.epoch = None
+
+    def set_epoch(self, epoch: int) -> None:
+        self.epoch = epoch
+
+    def __len__(self) -> int:
+        return len(self.dataset)
+
+    def __getitem__(self, i):
+        if self.mode == "train" and self.epoch is None:
+            raise RuntimeError("train 모드 CropWrapper는 set_epoch(epoch)를 먼저 불러야 합니다")
+        image, label, row_index = self.dataset[i]
+        # path는 크롭 에러 메시지용이라 크롭할 때만 꺼낸다
+        path = None if self.crop_size is None else self.dataset.df.loc[row_index, "path"]
+        if self.mode == "train":
+            image = train_crop(image, self.crop_size, self.seed, self.epoch, row_index, path)
+        else:
+            image = eval_crop(image, self.crop_size, path)
+        return self.to_tensor(image), label, row_index

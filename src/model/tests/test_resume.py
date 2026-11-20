@@ -98,3 +98,79 @@ def test_invalid_last_epoch_raises(last):
 def test_nan_val_loss_raises():
     with pytest.raises(ResumeError):
         plan_resume(2, [(1, 0.5), (2, float("nan"))], best_epoch=1)
+
+
+# ---- is_new_best (확정 후 보완 2-3) ----
+
+from src.model.resume import check_resume_config, is_new_best  # noqa: E402
+
+
+def test_is_new_best_first_epoch_true():
+    assert is_new_best([(1, 0.7)], 1) is True
+
+
+def test_is_new_best_tie_false():
+    """동점이면 앞 epoch를 유지하므로 거짓."""
+    assert is_new_best([(1, 0.5), (2, 0.5)], 2) is False
+
+
+def test_is_new_best_lower_true_higher_false():
+    assert is_new_best([(1, 0.5), (2, 0.4)], 2) is True
+    assert is_new_best([(1, 0.5), (2, 0.6)], 2) is False
+
+
+def test_is_new_best_missing_epoch_raises():
+    with pytest.raises(ResumeError):
+        is_new_best([(1, 0.5)], 2)
+
+
+# ---- check_resume_config ----
+
+def saved_config():
+    return {
+        "run_name": "cifake_baseline",
+        "lr": 0.0001,
+        "crop_size": None,
+        "epochs": 5,
+        "manifest_sha256": "aaa",
+        "git_commit": "7d39f41",
+        "torch_version": "2.5.0",
+        "torchvision_version": "0.20.0",
+        "gpu_name": "Tesla T4",
+    }
+
+
+def test_resume_config_same_no_warning():
+    assert check_resume_config(saved_config(), saved_config()) == []
+
+
+def test_resume_config_setting_differs_raises():
+    current = {**saved_config(), "lr": 0.001}
+    with pytest.raises(ResumeError, match="lr"):
+        check_resume_config(saved_config(), current)
+
+
+def test_resume_config_missing_key_raises():
+    current = saved_config()
+    del current["epochs"]
+    with pytest.raises(ResumeError, match="epochs"):
+        check_resume_config(saved_config(), current)
+
+
+def test_resume_config_manifest_differs_raises():
+    current = {**saved_config(), "manifest_sha256": "bbb"}
+    with pytest.raises(ResumeError, match="manifest_sha256"):
+        check_resume_config(saved_config(), current)
+
+
+def test_resume_config_commit_only_warns():
+    current = {**saved_config(), "git_commit": "37a5390"}
+    warnings = check_resume_config(saved_config(), current)
+    assert len(warnings) == 1
+    assert "git_commit" in warnings[0]
+
+
+def test_resume_config_env_keys_warn():
+    current = {**saved_config(), "torch_version": "2.6.0", "gpu_name": "NVIDIA L4"}
+    warnings = check_resume_config(saved_config(), current)
+    assert len(warnings) == 2

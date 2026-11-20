@@ -88,3 +88,39 @@ def plan_resume(last_epoch: int, metrics_rows, best_epoch) -> ResumePlan:
         f"best.pt 불일치: best.pt epoch={best_epoch}, metrics의 val_loss 최소 epoch={min_epoch}, "
         f"last.pt epoch={last_epoch}"
     )
+
+
+def is_new_best(rows, epoch: int) -> bool:
+    """이번 epoch를 포함한 (epoch, val_loss) 목록에서 이번 epoch가 best인지 (동점이면 앞 epoch 유지).
+
+    train.py는 이 값이 참일 때만 best.pt를 저장한다.
+    """
+    if epoch not in [e for e, _ in rows]:
+        raise ResumeError(f"epoch {epoch}가 metrics 행에 없습니다")
+    return best_epoch_of(rows) == epoch
+
+
+# config.json에서 실행 환경 키: 다르면 경고만 한다
+ENV_KEYS = ("git_commit", "torch_version", "torchvision_version", "gpu_name")
+# 다르면 에러인 데이터 키 (설정 키와 함께 검사)
+MANIFEST_KEY = "manifest_sha256"
+
+_MISSING = object()
+
+
+def check_resume_config(saved: dict, current: dict) -> list[str]:
+    """config.json(saved)과 이번 실행 값(current)을 비교한다.
+
+    - 설정 키나 manifest_sha256이 다르면(한쪽에만 있는 키 포함) ResumeError, 다른 키 이름을 출력한다.
+    - ENV_KEYS(git 커밋, torch·torchvision 버전, GPU 이름)가 다르면 경고 문자열 목록을 돌려준다.
+    """
+    keys = [k for k in dict.fromkeys([*saved, *current]) if k not in ENV_KEYS]
+    differ = [k for k in keys if saved.get(k, _MISSING) != current.get(k, _MISSING)]
+    if differ:
+        raise ResumeError(f"config.json과 설정이 달라 재개할 수 없습니다. 다른 키: {differ}")
+    warnings = []
+    for k in ENV_KEYS:
+        old, new = saved.get(k), current.get(k)
+        if old != new:
+            warnings.append(f"{k}가 처음 실행과 다릅니다: {old} → {new}")
+    return warnings
