@@ -1,8 +1,8 @@
 # SPEC-02: 베이스라인 학습
 
-- 상태: 확정
+- 상태: 구현 완료 (GenImage 대기)
 - 담당: 안승주
-- 관련 결정·실험: DECISIONS.md "모델 입력 규칙", "CIFAKE 입력 크기", "CIFAKE 알려진 한계", "로컬 개발 환경", "분할과 저장", SPEC-01a, SPEC-01b
+- 관련 결정·실험: DECISIONS.md "모델 입력 규칙", "CIFAKE 입력 크기", "CIFAKE 알려진 한계", "로컬 개발 환경", "분할과 저장", SPEC-01a, SPEC-01b, EXP-001
 
 ## 목적
 `original` 조건 train으로 판별 모델을 학습해 "기존 판별 모델" 역할을 할 베이스라인 가중치를 만든다.
@@ -137,15 +137,15 @@
 - [x] resume.py: 정상 / last 후 best 전 끊김(복구) / 불일치(에러) 세 경우를 pytest로 확인한다
 
 ### B. Colab CIFAKE 실행
-- [ ] 학습 시작 로그의 manifest_sha256이 79e176eeb61bb024e6ffbc5163b5c84fa02f23daf74b9e39c2427086bcb3740c이다
-- [ ] 로그의 사용 split이 train·val뿐이고, label별 행 수가 train 40,000/40,000, val 10,000/10,000이다
-- [ ] 1 epoch 소요 시간이 metrics.csv에 기록된다 (ResNet-18 교체 판단 근거)
-- [ ] 매 epoch 끝에 Drive의 last.pt와 metrics.csv가 갱신되고, metrics.csv에 val_ap·val_auc 열이 있다
-- [ ] 1 epoch 뒤 런타임을 끊고 다시 실행하면 다음 epoch부터 이어지고, metrics.csv에 같은 epoch가 두 번 기록되지 않는다
-- [ ] 설정이나 manifest가 다른 상태로 같은 run_name을 재개하면 에러가 난다
-- [ ] 학습이 끝난 뒤 val 정확도가 0.5(찍기 수준)보다 높다 (파이프라인 동작 확인용. 값은 실행 로그에서 옮겨 적는다)
-- [ ] docs/experiments/에 CIFAKE 실험 기록을 남긴다
-- [ ] (선택) Colab에서 metrics.py의 AP·AUC를 sklearn 결과와 비교해 같다
+- [x] 학습 시작 로그의 manifest_sha256이 79e176eeb61bb024e6ffbc5163b5c84fa02f23daf74b9e39c2427086bcb3740c이다
+- [x] 로그의 사용 split이 train·val뿐이고, label별 행 수가 train 40,000/40,000, val 10,000/10,000이다
+- [x] 1 epoch 소요 시간이 metrics.csv에 기록된다 (ResNet-18 교체 판단 근거)
+- [x] 매 epoch 끝에 Drive의 last.pt와 metrics.csv가 갱신되고, metrics.csv에 val_ap·val_auc 열이 있다
+- [x] 1 epoch 뒤 런타임을 끊고 다시 실행하면 다음 epoch부터 이어지고, metrics.csv에 같은 epoch가 두 번 기록되지 않는다
+- [x] 설정이나 manifest가 다른 상태로 같은 run_name을 재개하면 에러가 난다
+- [x] 학습이 끝난 뒤 val 정확도가 0.5(찍기 수준)보다 높다 (파이프라인 동작 확인용. 값은 실행 로그에서 옮겨 적는다)
+- [x] docs/experiments/에 CIFAKE 실험 기록을 남긴다
+- [x] (선택) Colab에서 metrics.py의 AP·AUC를 sklearn 결과와 비교해 같다
 
 ### C. Colab GenImage 실행 (manifest.csv 준비 후)
 - [ ] 학습 시작 전 train·val `original`의 label별 width·height·format 분포를 출력하고, real과 fake의 분포가 같음을 확인한다
@@ -159,7 +159,7 @@ A·B가 끝나고 C만 남으면 상태를 "구현 완료 (GenImage 대기)"로 
 - 로컬 CPU: pytest에서 PIL로 만든 작은 가짜 이미지(512×512, 300×260, 256×256, 32×32, 200×512)로 transforms.py를, 손으로 만든 라벨·점수 배열로 metrics.py를, 손으로 만든 (epoch, val_loss) 목록으로 resume.py를, 임시 JSON 파일로 config.py를 확인한다 (A).
   train.py는 torch가 필요해 로컬에서 import하지 않는다.
   B-코드에서 추가한 CropWrapper, run_log.py, resume.py 추가 함수도 로컬에서 확인한다 (확정 후 보완 2).
-- Colab GPU: run_model.ipynb에서 git pull → Drive 연결 → cifake zip을 /content에 풀기 → train.py 실행 (B).
+- Colab GPU: run_model.ipynb에서 Drive 연결 → zip 복사·풀기 → manifest 복사 → git clone → train.py 실행 (B, 순서와 위치는 확정 후 보완 3).
   재개 확인은 실제로 런타임을 끊었다가 다시 실행해서 본다.
 
 ## 알려진 한계
@@ -232,3 +232,21 @@ B-코드 로컬 확인 (pytest, 완료 기준 B는 그대로)
 - run_log: None 지표가 쓰고 읽은 뒤에도 None, 헤더 불일치 에러, 재개 다시 쓰기 후 남은 행이 1~last epoch
 - is_new_best: 첫 epoch 참, 동점이면 거짓
 - check_resume_config: 설정 다름·manifest 다름은 에러, 커밋만 다름은 경고
+
+## 확정 후 보완 3 (2026-11-20, B-실행 후, 동작·완료 기준 변경 없음)
+B-실행에서 본문과 다르게 진행한 실행 절차를 기록한다. 학습 코드의 동작은 바뀌지 않았다.
+
+1. 레포 받기: `git pull` 대신 런타임마다 `git clone`한다. Colab 런타임은 매번 새로 떠서 pull할 기존 사본이 없다.
+   (CLAUDE.md "작업 방식"은 clone과 pull을 모두 허용한다)
+2. Colab 준비 순서 (런타임마다): GPU 확인 → Drive 연결 → cifake.zip을 /content로 복사하고 sha256 확인
+   → /content/data에 압축 풀기(120,000장 확인) → cifake_manifest.csv를 /content/data/에 복사하고 sha256 확인
+   → 레포 clone → train.py 실행
+   - manifest는 압축을 푼 뒤에 복사한다. 압축 풀기 단계에서 /content/data를 지우고 새로 만들기 때문이다.
+   - 복사 위치는 설정 파일의 manifest_path(/content/data/cifake_manifest.csv), data_root(/content/data)와 같다.
+3. 입력 파일 위치: cifake.zip과 cifake_manifest.csv는 안승주 Drive의 임시 폴더 `MyDrive/ai-image-detector-tmp/`에 두고 썼다.
+   결과 저장 위치(`MyDrive/ai-image-detector-runs/`)와는 분리했다.
+   공유 위치는 아직 정해지지 않았으므로 미해결 8은 열어 둔다. 정해지면 준비 셀의 경로만 바꾼다.
+4. B5·B6은 본 실행(cifake_baseline)이 아닌 별도 run으로 확인했다. 본 실행의 결과 파일을 재개·에러 시험으로 건드리지 않기 위함이다.
+   - B5: cifake_resume_test2 (epochs 3)
+   - B6: cifake_resume_test (epochs 3, 완료된 상태에서 시험). lr 변경, manifest 로컬 사본 끝에 빈 줄 추가(해시만 변경)
+   - 이 run들의 수치는 실험 결과로 쓰지 않는다 (EXP-001).
