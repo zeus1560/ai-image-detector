@@ -22,10 +22,11 @@
 
 ## 출력
 1. 코드
-   - `src/model/transforms.py`: 크롭 좌표 계산과 PIL 크롭 (torch를 import하지 않음)
+   - `src/model/transforms.py`: 크롭 좌표 계산과 PIL 크롭, 크롭 감싸기(CropWrapper) (torch를 import하지 않음)
    - `src/model/metrics.py`: 정확도, 실제 사진 오탐률, 생성 이미지 미탐률, AP, ROC-AUC (numpy만 사용, torch를 import하지 않음, SPEC-03에서 재사용)
    - `src/model/config.py`: 설정 파일 읽기와 필수 키 검사 (torch를 import하지 않음. 로컬 테스트를 위해 train.py와 분리)
-   - `src/model/resume.py`: 재개 판단 순수 함수 (metrics 행 정리, best.pt 정합성. torch를 import하지 않음)
+   - `src/model/resume.py`: 재개 판단 순수 함수 (metrics 행 정리, best.pt 정합성, best 저장 여부, 재개 설정 비교. torch를 import하지 않음)
+   - `src/model/run_log.py`: metrics.csv 열 정의와 읽기·쓰기 (torch를 import하지 않음)
    - `src/model/train.py`: 모델 생성, 학습 루프, 체크포인트, 로그 (torch 필요, Colab 실행)
    - `src/model/configs/*.json`
    - `notebooks/run_model.ipynb`에 학습 실행 칸
@@ -157,6 +158,7 @@ A·B가 끝나고 C만 남으면 상태를 "구현 완료 (GenImage 대기)"로 
 ## 테스트 방법
 - 로컬 CPU: pytest에서 PIL로 만든 작은 가짜 이미지(512×512, 300×260, 256×256, 32×32, 200×512)로 transforms.py를, 손으로 만든 라벨·점수 배열로 metrics.py를, 손으로 만든 (epoch, val_loss) 목록으로 resume.py를, 임시 JSON 파일로 config.py를 확인한다 (A).
   train.py는 torch가 필요해 로컬에서 import하지 않는다.
+  B-코드에서 추가한 CropWrapper, run_log.py, resume.py 추가 함수도 로컬에서 확인한다 (확정 후 보완 2).
 - Colab GPU: run_model.ipynb에서 git pull → Drive 연결 → cifake zip을 /content에 풀기 → train.py 실행 (B).
   재개 확인은 실제로 런타임을 끊었다가 다시 실행해서 본다.
 
@@ -192,3 +194,41 @@ A·B가 끝나고 C만 남으면 상태를 "구현 완료 (GenImage 대기)"로 
 - resume.py는 val_loss에, metrics.py는 점수에 NaN(또는 무한대)이 있으면 에러를 낸다. NaN이 섞이면 최소값 비교와 정렬이 조용히 틀려지기 때문이다.
 - ROC-AUC는 같은 점수에 평균 순위를 주는 순위 합(Mann–Whitney U) 방식으로 계산한다. 7절의 쌍 비교 정의와 같은 값이며(손 계산 테스트로 확인), val 2만 장에서 1억 쌍을 직접 세지 않기 위함이다.
 - train.py가 best.pt를 저장할지 정할 때도 resume.py의 `best_epoch_of()`를 쓴다. 저장 규칙과 재개 시 정합성 검사가 같은 동점 규칙(앞 epoch)을 따르게 하기 위함이다 (B에서 적용).
+
+## 확정 후 보완 2 (2026-11-20, B-코드 착수 전, 완료 기준 변경 없음)
+train.py에서 torch가 필요 없는 로직을 분리해 로컬 pytest로 먼저 확인한다.
+Colab 재개 확인(런타임 끊고 다시 실행)은 한 번 돌리는 데 시간이 오래 걸려, 거기서 처음 버그를 찾지 않기 위함이다.
+
+1. 크롭 감싸기 (transforms.py, CropWrapper)
+   - ManifestDataset의 transform은 PIL 이미지만 받아 epoch·row_index를 쓸 수 없다.
+     그래서 train.py는 ManifestDataset을 transform=None으로 만들고 CropWrapper로 감싼다.
+   - CropWrapper(dataset, crop_size, mode("train"/"eval"), seed, to_tensor)
+     - __getitem__: dataset에서 (PIL, label, row_index)를 받아 mode에 맞게 train_crop / eval_crop을 적용하고,
+       to_tensor(크롭된 PIL), label, row_index를 돌려준다. 크롭 에러 메시지용 path는 dataset.df에서 꺼낸다.
+     - to_tensor는 train.py가 넣는다 (ToTensor + Normalize). CropWrapper는 torch를 import하지 않는다.
+     - mode="train"은 set_epoch(epoch)로 현재 epoch를 받는다. set_epoch 전에 꺼내면 에러 (epoch 기본값으로 조용히 도는 것을 막기 위함).
+   - train.py는 매 epoch 시작 전 set_epoch(epoch)를 부르고, DataLoader는 persistent_workers=False로 고정한다.
+     True면 워커가 첫 epoch 때 복사한 epoch 값을 계속 써서 epoch가 바뀌어도 같은 위치를 자른다.
+     CIFAKE는 crop_size=null이라 이 문제가 B에서 드러나지 않으므로 로컬 테스트로 확인한다.
+
+2. metrics.csv 읽기·쓰기 (run_log.py)
+   - 열 순서: epoch, train_loss, val_loss, val_accuracy, val_false_positive_rate, val_false_negative_rate, val_ap, val_auc, epoch_seconds
+     (지표 열 이름은 metrics.py label_metrics의 키에 val_을 붙인 것)
+   - 값이 None인 지표는 빈칸으로 저장하고, 읽을 때 빈칸은 None으로 돌린다. epoch와 val_loss는 빈칸이면 에러.
+   - 행 추가: 파일이 없으면 헤더와 함께 만든다. 열이 빠지거나 남으면 에러.
+   - 읽기: 헤더가 위 열 순서와 다르면 에러. (epoch, val_loss) 목록을 plan_resume에 넘길 수 있게 돌려준다.
+   - 재개 시 다시 쓰기: plan_resume이 남긴 epoch의 행만 원래 순서대로, 임시 파일 후 os.replace로 쓴다.
+
+3. resume.py 추가
+   - is_new_best(rows, epoch): 이번 epoch를 포함한 (epoch, val_loss) 목록에서 best_epoch_of(rows) == epoch인지. epoch가 rows에 없으면 에러.
+     train.py는 이 값이 참일 때만 best.pt를 저장한다.
+   - check_resume_config(saved, current): config.json(저장된 것)과 이번 실행 값을 비교한다.
+     - config 전체 또는 manifest_sha256이 다르면 에러, 다른 키 이름을 출력
+     - git 커밋 해시, torch·torchvision 버전, GPU 이름이 다르면 경고 목록만 돌려준다
+   - 재개할 때 config.json은 덮어쓰지 않는다 (처음 실행 기록 유지). 이번 실행의 커밋·버전·GPU는 train_log.txt에 출력한다.
+
+B-코드 로컬 확인 (pytest, 완료 기준 B는 그대로)
+- CropWrapper: 같은 (seed, epoch, row_index)는 꺼내는 순서와 상관없이 같은 좌표, set_epoch로 epoch를 바꾸면 좌표가 바뀜, set_epoch 전 train 모드 호출은 에러, crop_size=null이면 그대로
+- run_log: None 지표가 쓰고 읽은 뒤에도 None, 헤더 불일치 에러, 재개 다시 쓰기 후 남은 행이 1~last epoch
+- is_new_best: 첫 epoch 참, 동점이면 거짓
+- check_resume_config: 설정 다름·manifest 다름은 에러, 커밋만 다름은 경고
