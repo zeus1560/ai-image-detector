@@ -100,17 +100,17 @@ split 겹침 검사는 한 manifest 안에서만 보므로 이것을 잡지 못�
 ## 완료 기준
 
 ### A. 로컬 pytest (CPU, torch 없이)
-- [ ] 평가 설정에 필수 키가 빠지면 에러가 나고 빠진 키 이름이 출력된다. split이 "train"이면 에러가 난다
-- [ ] 손으로 만든 예측 표(source 2개, condition 3개, generator 2개)에서 summary의 (source, condition) 행마다 n_real·n_fake·오탐 수·미탐 수·정확도·오탐률·미탐률이 손 계산 값과 같다
-- [ ] 생성기별 행은 generator ≠ real만 있고, 미탐률이 손 계산 값과 같다
-- [ ] 한 라벨만 있는 그룹(예: fake만 있는 latest)에서 오탐률·AP·ROC-AUC가 빈칸이다
-- [ ] drop: 손 계산 예시에서 정확도·오탐률·미탐률 하락이 %p 값과 같고, original이 없는 source는 빈칸이다
-- [ ] predictions.csv를 쓰고 다시 읽으면 값이 같다 (logit·score 소수점 손실 없이)
-- [ ] manifest 버전 확인: 해시 같음(통과) / 해시 다름 + val 평가 + 학습 val과만 겹침(통과) / 해시 다름 + val 평가 + 학습 train과 겹침(에러) / 해시 다름 + test 평가 + 학습 val과 겹침(에러) / 학습 manifest 해시 불일치(에러)
-- [ ] 출력 폴더가 이미 있으면 에러가 난다
-- [ ] split=test + checkpoint=last면 에러가 난다
-- [ ] Wilson 구간이 손 계산 값(예: 100장 중 90 맞음)과 소수 4자리까지 같다
-- [ ] kakao drop: 손으로 만든 표 세 가지에서 확인한다. 모두 연결(연결 방식 값이 손 계산과 같음) / 모두 미연결(전체 비교 값이 손 계산과 같음) / 일부만 연결(에러)
+- [x] 평가 설정에 필수 키가 빠지면 에러가 나고 빠진 키 이름이 출력된다. split이 "train"이면 에러가 난다
+- [x] 손으로 만든 예측 표(source 2개, condition 3개, generator 2개)에서 summary의 (source, condition) 행마다 n_real·n_fake·오탐 수·미탐 수·정확도·오탐률·미탐률이 손 계산 값과 같다
+- [x] 생성기별 행은 generator ≠ real만 있고, 미탐률이 손 계산 값과 같다
+- [x] 한 라벨만 있는 그룹(예: fake만 있는 latest)에서 오탐률·AP·ROC-AUC가 빈칸이다
+- [x] drop: 손 계산 예시에서 정확도·오탐률·미탐률 하락이 %p 값과 같고, original이 없는 source는 빈칸이다
+- [x] predictions.csv를 쓰고 다시 읽으면 값이 같다 (logit·score 소수점 손실 없이)
+- [x] manifest 버전 확인: 해시 같음(통과) / 해시 다름 + val 평가 + 학습 val과만 겹침(통과) / 해시 다름 + val 평가 + 학습 train과 겹침(에러) / 해시 다름 + test 평가 + 학습 val과 겹침(에러) / 학습 manifest 해시 불일치(에러)
+- [x] 출력 폴더가 이미 있으면 에러가 난다
+- [x] split=test + checkpoint=last면 에러가 난다
+- [x] Wilson 구간이 손 계산 값(예: 100장 중 90 맞음)과 소수 4자리까지 같다
+- [x] kakao drop: 손으로 만든 표 세 가지에서 확인한다. 모두 연결(연결 방식 값이 손 계산과 같음) / 모두 미연결(전체 비교 값이 손 계산과 같음) / 일부만 연결(에러)
 
 ### B. Colab CIFAKE 실행 (cifake_baseline best.pt)
 - [ ] split=val 평가의 정확도·오탐률·미탐률이 metrics.csv의 best epoch(2) 값과 같다 (같은 체크포인트·같은 데이터. 다르면 몇 장이 다른지와 그 이미지의 로짓을 기록하고 원인을 확인한다. AP·ROC-AUC는 1e-4 이내)
@@ -149,3 +149,12 @@ A·B가 끝나고 C만 남으면 상태를 "구현 완료 (GenImage 대기)"로 
 5. 장수가 적은 그룹(kakao·latest 50~100장)의 신뢰구간(예: Wilson 95%)을 summary에 넣을지. 넣지 않으면 개수만 함께 보고한다 (결정: 비율 지표에 Wilson 95% 구간, 처리 방식 3)
 6. 같은 origin_id의 조건 간 쌍 비교 (예: original에서 맞혔는데 jpeg50에서 틀린 비율)를 넣을지. predictions.csv에 origin_id가 있어 나중에 계산할 수 있다 (결정: 범위 밖)
 7. 평가할 체크포인트: best.pt만 / best와 last 둘 다 (SPEC-04 비교 기준과 같이 정해야 함) (결정: test는 best만, val은 best·last 허용. 입력 1)
+
+## 확정 후 보완 1 (2026-11-21, A 구현 후, 동작·완료 기준 변경 없음)
+구현하면서 정한 출력 형식을 기록한다. SPEC-04와 실험 기록은 이 형식을 따른다.
+1. predictions.csv의 label은 pred와 같은 0(real)/1(fake) 정수다 (manifest의 label은 real/fake 문자열).
+2. summary.csv는 한 파일에 두 그룹을 담고 group 열(condition / generator)로 구분한다. generator 행은 미탐률과 그 Wilson 구간만 채운다.
+3. drop.csv의 열 이름은 하락(…_drop_pp)과 증가(…_increase_pp)를 구분한다. 값은 반올림하지 않는다.
+   baseline 열(기준 방식)과 baseline_n_real·baseline_n_fake 열(기준 그룹 장수)을 함께 쓴다.
+4. 포맷 편향 경고는 (source, condition)별 real·fake의 확장자 비율이 다르면 낸다. 한 라벨만 있는 그룹은 비교하지 않는다.
+5. 출력 폴더 생성과 manifest 버전 확인은 eval_config.py에 둔다.
