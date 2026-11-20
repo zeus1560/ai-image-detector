@@ -1,0 +1,12 @@
+{
+  "eval_name": "cifake_baseline_eval_test",
+  "run_dir": "/content/drive/MyDrive/ai-image-detector-runs/cifake_baseline",
+  "checkpoint": "best",
+  "manifest_path": "/content/data/cifake_manifest.csv",
+  "data_root": "/content/data",
+  "split": "test",
+  "source": "cifake",
+  "batch_size": 64,
+  "num_workers": 2,
+  "train_manifest_path": null
+}

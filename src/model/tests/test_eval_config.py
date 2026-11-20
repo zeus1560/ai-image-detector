@@ -13,6 +13,7 @@ from src.model.eval_config import (
     OutputExistsError,
     check_manifest_version,
     create_output_dir,
+    ensure_output_dir_absent,
     eval_output_dir,
     load_eval_config,
 )
@@ -97,7 +98,15 @@ def test_output_dir_exists_raises_and_keeps_files(tmp_path):
 
     with pytest.raises(OutputExistsError):
         create_output_dir(eval_output_dir(config))
+    with pytest.raises(OutputExistsError):
+        ensure_output_dir_absent(eval_output_dir(config))
     assert (out / "predictions.csv").read_text(encoding="utf-8") == "old"
+
+
+def test_ensure_absent_does_not_create(tmp_path):
+    path = tmp_path / "run" / "eval" / "x"
+    ensure_output_dir_absent(path)
+    assert not path.exists()
 
 
 # ---------------------------------------------------------------- manifest 버전 확인 (A7)

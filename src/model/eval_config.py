@@ -90,6 +90,24 @@ def eval_output_dir(config: dict) -> Path:
     return Path(config["run_dir"]) / "eval" / config["eval_name"]
 
 
+def _exists_error(path: Path) -> OutputExistsError:
+    return OutputExistsError(
+        f"평가 출력 폴더가 이미 있습니다: {path}. "
+        "이전 평가 결과를 덮어쓰지 않으려면 eval_name을 바꾸세요."
+    )
+
+
+def ensure_output_dir_absent(path) -> None:
+    """평가 결과 폴더가 이미 있으면 OutputExistsError (처리 방식 1-2, 만들지는 않는다).
+
+    evaluate.py는 실행 초반에 이것으로 먼저 확인하고, manifest 검사·버전 확인이 통과한 뒤
+    create_output_dir로 만든다 (검사 실패로 빈 폴더가 남아 같은 eval_name을 못 쓰게 되는 것을 막기 위함).
+    """
+    path = Path(path)
+    if path.exists():
+        raise _exists_error(path)
+
+
 def create_output_dir(path) -> Path:
     """평가 결과 폴더를 만든다. 이미 있으면 OutputExistsError (처리 방식 1-2).
 
@@ -99,10 +117,7 @@ def create_output_dir(path) -> Path:
     try:
         path.mkdir(parents=True, exist_ok=False)
     except FileExistsError:
-        raise OutputExistsError(
-            f"평가 출력 폴더가 이미 있습니다: {path}. "
-            "이전 평가 결과를 덮어쓰지 않으려면 eval_name을 바꾸세요."
-        ) from None
+        raise _exists_error(path) from None
     return path
 
 
