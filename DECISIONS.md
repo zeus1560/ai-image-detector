@@ -70,5 +70,9 @@
 - CIFAKE REAL이 CIFAR-10의 train/test 구분을 그대로 따르는지는 (미확인). 우리 val은 CIFAR train에서 떼어냈는데, 논문은 train 안의 중복을 조사하지 않았으므로 train-val 중복 정도도 (미확인).
 - 왜: 파일이 서로 달라 origin_id 검사로는 잡히지 않는다. CIFAKE는 파이프라인 확인용이라 결과를 발표 수치로 쓰지 않으므로 고칠 필요가 없다.
 
+## 2026-11 CSV 줄바꿈 (확정)
+- 레포에 .gitattributes(*.csv -text)를 둬 git이 CSV 줄바꿈을 바꾸지 않게 한다.
+- 왜: 앞으로 레포에 커밋할 CSV(테스트용 manifest 등)의 바이트가 OS마다 달라지지 않게 하기 위함이다. Drive의 manifest.csv는 git을 거치지 않으므로 이 설정과 무관하고, 해시 보존은 데이터 계약 규칙 8(파일 복사로 스냅샷)로 지킨다.
+
 ## 미해결
 - 데이터 계약의 미해결 절 참고 (sns_sim 정의, 생성기 최종 선택, 흑백 test 처리, 실제 사진 origin_id 규칙 등)
