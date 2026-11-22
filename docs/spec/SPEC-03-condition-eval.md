@@ -1,6 +1,6 @@
 # SPEC-03: 조건별 평가
 
-- 상태: 확정
+- 상태: 구현 완료 (GenImage 대기)
 - 담당: 안승주
 - 관련 결정·실험: 데이터 계약 "manifest 열"·"규칙", DECISIONS.md "변형 조건", "분할과 저장", "모델 입력 규칙", SPEC-01a, SPEC-02, EXP-001
 
@@ -113,11 +113,11 @@ split 겹침 검사는 한 manifest 안에서만 보므로 이것을 잡지 못�
 - [x] kakao drop: 손으로 만든 표 세 가지에서 확인한다. 모두 연결(연결 방식 값이 손 계산과 같음) / 모두 미연결(전체 비교 값이 손 계산과 같음) / 일부만 연결(에러)
 
 ### B. Colab CIFAKE 실행 (cifake_baseline best.pt)
-- [ ] split=val 평가의 정확도·오탐률·미탐률이 metrics.csv의 best epoch(2) 값과 같다 (같은 체크포인트·같은 데이터. 다르면 몇 장이 다른지와 그 이미지의 로짓을 기록하고 원인을 확인한다. AP·ROC-AUC는 1e-4 이내)
-- [ ] split=test 평가 시작 로그의 행 수가 real 10,000 / fake 10,000이고, predictions.csv가 20,000행이다
-- [ ] summary.csv에 (cifake, original) 행이 있고, AP·ROC-AUC가 같은 predictions.csv로 sklearn 계산값과 같다
-- [ ] 같은 eval_name으로 다시 실행하면 에러가 나고 기존 결과 파일이 바뀌지 않는다
-- [ ] docs/experiments/에 기록을 남긴다 (CIFAKE 결과는 발표 수치로 쓰지 않는다)
+- [x] split=val 평가의 정확도·오탐률·미탐률이 metrics.csv의 best epoch(2) 값과 같다 (같은 체크포인트·같은 데이터. 다르면 몇 장이 다른지와 그 이미지의 로짓을 기록하고 원인을 확인한다. AP·ROC-AUC는 1e-4 이내)
+- [x] split=test 평가 시작 로그의 행 수가 real 10,000 / fake 10,000이고, predictions.csv가 20,000행이다
+- [x] summary.csv에 (cifake, original) 행이 있고, AP·ROC-AUC가 같은 predictions.csv로 sklearn 계산값과 같다
+- [x] 같은 eval_name으로 다시 실행하면 에러가 나고 기존 결과 파일이 바뀌지 않는다
+- [x] docs/experiments/에 기록을 남긴다 (CIFAKE 결과는 발표 수치로 쓰지 않는다)
 
 ### C. Colab GenImage 실행 (manifest.csv 준비 후)
 - [ ] val과 test 각각에서 original, jpeg90/75/50/30, resize50 그룹이 summary.csv에 있고, 각 그룹의 n_real·n_fake가 manifest 요약표와 같다
