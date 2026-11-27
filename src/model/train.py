@@ -3,7 +3,7 @@
 실행: python -m src.model.train --config <설정 JSON 경로>
 
 torch는 이 파일에서만 import한다 (로컬 Windows에서는 torch import가 막혀 있어 Colab에서만 실행).
-torch가 필요 없는 로직은 config.py, transforms.py(CropWrapper), run_log.py, resume.py, metrics.py에 있고
+torch가 필요 없는 로직은 config.py, transforms.py(CropWrapper), run_log.py, resume.py, metrics.py, select.py에 있고
 로컬 pytest로 확인한다.
 
 출력 (output_dir/run_name/)
@@ -36,7 +36,8 @@ from torchvision.models import ResNet50_Weights, resnet50
 
 from . import resume as rs
 from . import run_log
-from .config import load_config
+from . import select as sel
+from .config import TRAIN_GENERATORS_KEY, load_config
 from .dataset import LABEL_TO_INDEX, ManifestDataset
 from .metrics import average_precision, label_metrics, roc_auc
 from .transforms import CropWrapper
@@ -182,8 +183,14 @@ def build_model(config: dict) -> nn.Module:
 
 
 def build_datasets(config: dict):
+    """split별 CropWrapper와 고르기 전 df를 돌려준다.
+
+    ManifestDataset을 지금처럼 만든 뒤(전체 manifest 검사 포함) dataset.df를
+    select_train_rows 결과로 바꾼다 (보완 4). train_generators 키가 없으면 df는 그대로다.
+    """
     to_tensor = T.Compose([T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
-    datasets = {}
+    train_generators = config.get(TRAIN_GENERATORS_KEY)
+    datasets, before = {}, {}
     for split, mode in (("train", "train"), ("val", "eval")):
         base = ManifestDataset(
             config["manifest_path"],
@@ -193,8 +200,10 @@ def build_datasets(config: dict):
             split=split,
             transform=None,
         )
+        before[split] = base.df
+        base.df = sel.select_train_rows(base.df, train_generators, split)
         datasets[split] = CropWrapper(base, config["crop_size"], mode, config["seed"], to_tensor)
-    return datasets
+    return datasets, before
 
 
 def build_loader(dataset, config: dict, shuffle: bool, generator=None) -> DataLoader:
@@ -334,7 +343,7 @@ def run(config: dict) -> None:
     seed_everything(config["seed"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    datasets = build_datasets(config)
+    datasets, before = build_datasets(config)
     manifest_sha256 = datasets["train"].dataset.manifest_sha256
     env = env_info()
     record = {**config, rs.MANIFEST_KEY: manifest_sha256, **env}
@@ -344,11 +353,18 @@ def run(config: dict) -> None:
     print("학습 시작:", time.strftime("%Y-%m-%d %H:%M:%S"))
     print("config:", json.dumps(config, ensure_ascii=False))
     print("manifest_sha256:", manifest_sha256)
+    # 보완 4: 학습 생성기, 고르기 전 표, (기존 형식) 고른 뒤 label 행 수, 고른 뒤 gray 표
+    train_generators = config.get(TRAIN_GENERATORS_KEY)
+    print(sel.train_generators_line(train_generators))
+    for line in sel.generator_table_lines(before, train_generators):
+        print(line)
     index_to_label = {v: k for k, v in LABEL_TO_INDEX.items()}
     for split, ds in datasets.items():
         counts = ds.dataset.df["label"].value_counts()
         by_label = ", ".join(f"{name} {int(counts.get(name, 0))}" for name in index_to_label.values())
         print(f"split {split} (condition=original): {by_label}, 합계 {len(ds)}")
+    for line in sel.gray_table_lines({split: ds.dataset.df for split, ds in datasets.items()}):
+        print(line)
     print("장치:", device, f"({env['gpu_name']})" if env["gpu_name"] else "")
     if device.type != "cuda":
         print("!" * 60)

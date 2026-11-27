@@ -1,6 +1,6 @@
 # SPEC-02: 베이스라인 학습
 
-- 상태: 구현 완료 (GenImage 대기) — 보완 4 확정, 구현 전
+- 상태: 구현 완료 (GenImage 대기)
 - 담당: 안승주
 - 관련 결정·실험: DECISIONS.md "모델 입력 규칙", "CIFAKE 입력 크기", "CIFAKE 알려진 한계", "로컬 개발 환경", "분할과 저장", SPEC-01a, SPEC-01b, EXP-001
 
@@ -136,13 +136,13 @@
 - [x] 지표: 정답이 한 라벨만 있으면 AP·ROC-AUC가 None이다
 - [x] 설정 파일에 필수 키가 빠지면 에러가 나고 빠진 키 이름이 출력된다
 - [x] resume.py: 정상 / last 후 best 전 끊김(복구) / 불일치(에러) 세 경우를 pytest로 확인한다
-- [ ] (보완 4) train_generators가 없는 설정은 지금과 같이 읽히고, select_train_rows(df, None, split)이 df를 그대로 돌려준다
-- [ ] (보완 4) 빈 목록, 중복, "real" 포함, 문자열이 아닌 값이 각각 ConfigError가 나고 이유가 출력된다
-- [ ] (보완 4) 생성기 3개(sd14, sd15, wukong) 테스트 manifest에서 ["sd14"]로 고르면 실제는 전부, 가짜는 sd14만 남는다 (train, val 각각)
-- [ ] (보완 4) 목록에 manifest에 없는 생성기가 있으면 그 이름이 담긴 에러가 난다
-- [ ] (보완 4) 같은 실제 origin_id가 original에 두 행(generator만 다름) 있으면 에러가 난다
-- [ ] (보완 4) 실제 행의 generator가 real이 아니면 에러가 난다
-- [ ] (보완 4) cifake_baseline.json으로 만든 설정이 기존 config.json과 check_resume_config에서 에러 없이 비교된다
+- [x] (보완 4) train_generators가 없는 설정은 지금과 같이 읽히고, select_train_rows(df, None, split)이 df를 그대로 돌려준다
+- [x] (보완 4) 빈 목록, 중복, "real" 포함, 문자열이 아닌 값이 각각 ConfigError가 나고 이유가 출력된다
+- [x] (보완 4) 생성기 3개(sd14, sd15, wukong) 테스트 manifest에서 ["sd14"]로 고르면 실제는 전부, 가짜는 sd14만 남는다 (train, val 각각)
+- [x] (보완 4) 목록에 manifest에 없는 생성기가 있으면 그 이름이 담긴 에러가 난다
+- [x] (보완 4) 같은 실제 origin_id가 original에 두 행(generator만 다름) 있으면 에러가 난다
+- [x] (보완 4) 실제 행의 generator가 real이 아니면 에러가 난다
+- [x] (보완 4) cifake_baseline.json으로 만든 설정이 기존 config.json과 check_resume_config에서 에러 없이 비교된다
 
 ### B. Colab CIFAKE 실행
 - [x] 학습 시작 로그의 manifest_sha256이 79e176eeb61bb024e6ffbc5163b5c84fa02f23daf74b9e39c2427086bcb3740c이다
