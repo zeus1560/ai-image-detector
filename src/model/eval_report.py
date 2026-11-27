@@ -7,6 +7,10 @@ torch를 import하지 않는다. 지표 계산은 metrics.py를 재사용한다.
 - summarize: summary.csv (그룹별 지표)
 - compute_drop: drop.csv (원본 대비 하락, %p)
 - extension_table / format_bias_warnings: 시작 로그의 확장자 분포와 포맷 편향 경고
+- check_unique_origin_per_condition: 평가 시작 시 origin_id 중복 검사 (보완 2의 5)
+
+확정 후 보완 2: predictions.csv에 gray 열, summary 그룹 condition / gray_real / generator,
+summary·drop에 train_generator 열, drop도 생성기별.
 """
 
 from __future__ import annotations
@@ -31,10 +35,14 @@ PRED_COLUMNS = [
     "logit",
     "score",  # sigmoid(logit) = fake일 확률
     "pred",  # 1(fake) if logit >= 0 else 0
+    "gray",  # True/False (보완 2, manifest의 gray. 맨 끝)
 ]
+# 보완 2 이전 형식 (gray 없음). 읽으면 gray를 전부 False로 채운다
+LEGACY_PRED_COLUMNS = PRED_COLUMNS[:-1]
 _INT_COLUMNS = ("row_index", "label", "pred")
 _FLOAT_COLUMNS = ("logit", "score")
 _STR_COLUMNS = ("path", "source", "generator", "condition", "origin_id")
+GRAY_VALUES = {"True": True, "False": False}
 
 # 실수를 다시 읽었을 때 같은 값이 되도록 유효숫자 17자리로 쓴다 (float64 왕복 보장)
 FLOAT_FORMAT = "%.17g"
@@ -61,11 +69,16 @@ BASELINE_DESCRIPTIONS = {
     BASELINE_NONE: "기준 original 없음 (빈칸)",
 }
 
+GROUP_CONDITION = "condition"  # (source, condition)의 gray==False 행 (대표 지표)
+GROUP_GRAY_REAL = "gray_real"  # (source, condition)의 실제 gray==True 행 (오탐률만)
+GROUP_GENERATOR = "generator"  # 공유 실제 gray==False + 그 생성기 가짜 gray==False (전체 지표)
+
 SUMMARY_COLUMNS = [
-    "group",  # "condition" = (source, condition) 핵심 표 / "generator" = 생성기별 미탐률
+    "group",  # GROUP_CONDITION / GROUP_GRAY_REAL / GROUP_GENERATOR
     "source",
     "condition",
-    "generator",  # group=condition이면 빈칸
+    "generator",  # group=generator가 아니면 빈칸
+    "train_generator",  # generator 행: yes/no (학습 기록에 train_generators가 있을 때만), 그 밖은 빈칸
     "n_real",
     "n_fake",
     "n_false_positive",
@@ -93,8 +106,11 @@ DROP_METRICS = [
 ]
 
 DROP_COLUMNS = [
+    "group",  # GROUP_CONDITION / GROUP_GENERATOR (gray_real은 drop을 계산하지 않음)
     "source",
     "condition",
+    "generator",  # group=generator가 아니면 빈칸
+    "train_generator",
     "baseline",  # 기준 방식 (BASELINE_* 값)
     "baseline_n_real",
     "baseline_n_fake",
@@ -110,6 +126,10 @@ class KakaoLinkError(ValueError):
     """kakao 행의 origin_id가 genimage original과 일부만 연결될 때 나는 에러 (manifest 오류)."""
 
 
+class DuplicateOriginError(ValueError):
+    """평가 대상 행의 (source, condition) 안에서 같은 origin_id가 두 번 이상 나올 때 나는 에러."""
+
+
 # ---------------------------------------------------------------- predictions.csv
 
 
@@ -123,7 +143,8 @@ def build_predictions(rows: pd.DataFrame, logits) -> pd.DataFrame:
     """manifest 행(평가 순서 그대로)과 로짓으로 predictions 표를 만든다.
 
     Args:
-        rows: ManifestDataset.df (원래 행 인덱스 유지). label은 "real"/"fake" 문자열
+        rows: ManifestDataset.df (원래 행 인덱스 유지). label은 "real"/"fake" 문자열,
+              gray는 bool (SPEC-01a v3의 load_manifest가 채움)
         logits: rows와 같은 순서의 로짓 (fake 쪽)
     """
     logits = np.asarray(logits, dtype=np.float64)
@@ -145,6 +166,7 @@ def build_predictions(rows: pd.DataFrame, logits) -> pd.DataFrame:
             "score": sigmoid(logits),
             # 로짓 0 = 점수 0.5. 같으면 fake (train.py evaluate와 같은 규칙)
             "pred": (logits >= 0).astype(np.int64),
+            "gray": rows["gray"].astype(bool).to_numpy(),
         }
     )
     if out["label"].isna().any():
@@ -154,24 +176,77 @@ def build_predictions(rows: pd.DataFrame, logits) -> pd.DataFrame:
 
 
 def write_predictions(path, predictions: pd.DataFrame) -> None:
+    """gray(bool)는 문자열 True / False로 쓰인다."""
     if list(predictions.columns) != PRED_COLUMNS:
         raise PredictionsFormatError(f"predictions 열이 다릅니다: {list(predictions.columns)}")
     predictions.to_csv(path, index=False, float_format=FLOAT_FORMAT, lineterminator="\n", encoding="utf-8")
 
 
+def _parse_gray(values: pd.Series, path) -> np.ndarray:
+    """gray 문자열을 bool로. 빈 값을 먼저 에러로 보고, 그 다음 정확히 True/False가 아닌 값을 본다."""
+    blank = values.str.strip() == ""
+    if blank.any():
+        lines = [int(i) + 2 for i in values[blank].index[:10]]
+        raise PredictionsFormatError(f"predictions.csv의 gray에 빈 값 {int(blank.sum())}개 ({path}). 줄 번호 예: {lines}")
+    bad = ~values.isin(GRAY_VALUES)
+    if bad.any():
+        examples = [f"{int(i) + 2}번 줄='{v}'" for i, v in values[bad].head(10).items()]
+        raise PredictionsFormatError(
+            f"predictions.csv의 gray는 정확히 True/False여야 합니다 ({path}). 예: {', '.join(examples)}"
+        )
+    return values.map(GRAY_VALUES).to_numpy(dtype=bool)
+
+
 def read_predictions(path) -> pd.DataFrame:
+    """predictions.csv 읽기.
+
+    헤더가 새 형식(PRED_COLUMNS)이면 gray 값을 검사하고, 예전 형식(gray 없음)이면 gray를 전부 False로 채운다.
+    그 밖의 헤더는 에러.
+    """
     # 실수 열은 문자열로 읽어 Python float()로 바꾼다.
     # pandas 버전마다 기본 실수 파서가 달라 마지막 자릿수가 바뀔 수 있기 때문이다 (float()는 %.17g를 정확히 되돌린다)
     dtypes = {
         **{c: "int64" for c in _INT_COLUMNS},
-        **{c: str for c in (*_FLOAT_COLUMNS, *_STR_COLUMNS)},
+        **{c: str for c in (*_FLOAT_COLUMNS, *_STR_COLUMNS, "gray")},
     }
     df = pd.read_csv(path, dtype=dtypes, keep_default_na=False, encoding="utf-8")
-    if list(df.columns) != PRED_COLUMNS:
-        raise PredictionsFormatError(f"predictions.csv 헤더가 다릅니다: {list(df.columns)} (기대 {PRED_COLUMNS})")
+    columns = list(df.columns)
+    if columns == PRED_COLUMNS:
+        df["gray"] = _parse_gray(df["gray"], path)
+    elif columns == LEGACY_PRED_COLUMNS:
+        df["gray"] = False
+        print(f"gray 열 없는 예전 파일 → gray 전부 False (행 {len(df)}개): {path}")
+    else:
+        raise PredictionsFormatError(f"predictions.csv 헤더가 다릅니다: {columns} (기대 {PRED_COLUMNS})")
     for c in _FLOAT_COLUMNS:
         df[c] = np.array([float(v) for v in df[c]], dtype=np.float64)
     return df
+
+
+# ---------------------------------------------------------------- 평가 시작 검사 (보완 2의 5)
+
+
+def check_unique_origin_per_condition(rows: pd.DataFrame) -> str:
+    """(source, condition) 안에서 같은 origin_id가 두 번 이상 나오면 DuplicateOriginError.
+
+    rows는 평가 대상 행이다: evaluate.py가 평가하는 split(과 source)으로 거른 ManifestDataset.df.
+    다른 split의 행이나 다른 (source, condition)의 같은 origin_id(원본과 변형본, kakao 연결)는 중복이 아니다.
+    공유 실제 사진이 생성기마다 따로 등록되면 생성기 행에서 같은 사진이 중복으로 세어지기 때문에 막는다.
+
+    Returns:
+        통과 로그 문장
+    """
+    dup = rows[rows.duplicated(["source", "condition", "origin_id"], keep=False)]
+    if len(dup):
+        groups = dup.groupby(["source", "condition"])["origin_id"].unique()
+        details = [
+            f"({source}, {condition}) origin_id {len(ids)}개 예: {', '.join(map(str, ids[:10]))}"
+            for (source, condition), ids in groups.items()
+        ]
+        raise DuplicateOriginError(
+            "평가 대상 행의 (source, condition) 안에서 origin_id가 중복됩니다\n- " + "\n- ".join(details)
+        )
+    return f"(source, condition)별 origin_id 중복 0개 (평가 대상 {len(rows)}행)"
 
 
 # ---------------------------------------------------------------- 지표
@@ -235,33 +310,73 @@ def _iter_condition_groups(predictions: pd.DataFrame):
             yield source, condition, by_source[by_source["condition"] == condition]
 
 
-def summarize(predictions: pd.DataFrame) -> pd.DataFrame:
-    """summary.csv 표 (처리 방식 3).
+def _color_rows(g: pd.DataFrame) -> pd.DataFrame:
+    """대표 지표용 행: gray == False (흑백 실제·흑백 가짜 모두 뺀다)."""
+    return g[~g["gray"]]
 
-    1. group="condition": (source, condition)별 정확도·오탐률·미탐률(+Wilson 구간)·AP·ROC-AUC
-    2. group="generator": (source, condition, generator≠real)별 미탐률(+Wilson 구간)만
+
+def _generator_rows(g: pd.DataFrame, generator: str) -> pd.DataFrame:
+    """생성기 행용: 실제 gray==False 전체(공유 실제) + 그 생성기의 가짜 gray==False."""
+    color = _color_rows(g)
+    return color[(color["label"] == 0) | ((color["label"] == 1) & (color["generator"] == generator))]
+
+
+def _fake_generators(g: pd.DataFrame) -> list:
+    return sorted(g.loc[g["generator"] != REAL_GENERATOR, "generator"].unique())
+
+
+def _train_generator_mark(generator, train_generators):
+    """generator 행의 train_generator 값. train_generators가 None이면 빈칸."""
+    if train_generators is None:
+        return None
+    return "yes" if generator in train_generators else "no"
+
+
+def summarize(predictions: pd.DataFrame, train_generators=None) -> pd.DataFrame:
+    """summary.csv 표 (처리 방식 3, 보완 2의 2·3).
+
+    1. group="condition": (source, condition)의 gray==False 행. 정확도·오탐률·미탐률(+Wilson 구간)·AP·ROC-AUC
+    2. group="gray_real": 실제 행이 있는 (source, condition)마다 실제 gray==True 행. n_real·오탐 수·오탐률(+Wilson)만
+    3. group="generator": (source, condition, generator≠real)마다 공유 실제 gray==False + 그 생성기 가짜 gray==False. 전체 지표
+    흑백 가짜는 어디에도 들어가지 않는다.
+    train_generators: 학습 기록(run_dir/config.json)의 값. 있으면 generator 행에 yes/no, 없으면(None) 빈칸.
     """
+    base = {"generator": None, "train_generator": None}
     rows = []
     for source, condition, g in _iter_condition_groups(predictions):
-        rows.append({"group": "condition", "source": source, "condition": condition, "generator": None, **group_metrics(g)})
+        rows.append({"group": GROUP_CONDITION, "source": source, "condition": condition, **base, **group_metrics(_color_rows(g))})
 
     for source, condition, g in _iter_condition_groups(predictions):
-        for generator in sorted(g.loc[g["generator"] != REAL_GENERATOR, "generator"].unique()):
-            fake = g[(g["generator"] == generator) & (g["label"] == 1)]
-            n_fake = len(fake)
-            n_fn = int((fake["pred"] == 0).sum())
-            low, high = wilson_interval(n_fn, n_fake)
+        if not (g["label"] == 0).any():
+            continue
+        gray_real = g[(g["label"] == 0) & g["gray"]]
+        n_real = len(gray_real)
+        n_fp = int((gray_real["pred"] == 1).sum())
+        low, high = wilson_interval(n_fp, n_real)
+        rows.append(
+            {
+                "group": GROUP_GRAY_REAL,
+                "source": source,
+                "condition": condition,
+                **base,
+                "n_real": n_real,
+                "n_false_positive": n_fp,
+                "false_positive_rate": None if n_real == 0 else n_fp / n_real,
+                "false_positive_rate_ci_low": low,
+                "false_positive_rate_ci_high": high,
+            }
+        )
+
+    for source, condition, g in _iter_condition_groups(predictions):
+        for generator in _fake_generators(g):
             rows.append(
                 {
-                    "group": "generator",
+                    "group": GROUP_GENERATOR,
                     "source": source,
                     "condition": condition,
                     "generator": generator,
-                    "n_fake": n_fake,
-                    "n_false_negative": n_fn,
-                    "false_negative_rate": None if n_fake == 0 else n_fn / n_fake,
-                    "false_negative_rate_ci_low": low,
-                    "false_negative_rate_ci_high": high,
+                    "train_generator": _train_generator_mark(generator, train_generators),
+                    **group_metrics(_generator_rows(g, generator)),
                 }
             )
 
@@ -309,14 +424,28 @@ def _pp_change(base, value, sign):
     return (value - base) * 100 * sign
 
 
-def compute_drop(predictions: pd.DataFrame) -> pd.DataFrame:
-    """drop.csv 표: original 대비 하락 (단위 %p, 처리 방식 4).
+def _drop_row(head: dict, mode, cond_rows: pd.DataFrame, base_rows) -> dict:
+    row = {**head, "baseline": mode}
+    cond = group_metrics(cond_rows)
+    base = group_metrics(base_rows) if base_rows is not None else None
+    row["baseline_n_real"] = base["n_real"] if base else None
+    row["baseline_n_fake"] = base["n_fake"] if base else None
+    for metric, col, sign in DROP_METRICS:
+        row[col] = _pp_change(base[metric], cond[metric], sign) if base else None
+    return row
+
+
+def compute_drop(predictions: pd.DataFrame, train_generators=None) -> pd.DataFrame:
+    """drop.csv 표: original 대비 하락 (단위 %p, 처리 방식 4, 보완 2의 4).
 
     - 같은 source의 condition≠original 그룹마다 그 source의 original과 비교한다
-    - kakao source는 genimage original을 기준으로 한다 (kakao_baseline으로 자동 판정)
+    - kakao source는 genimage original을 기준으로 한다 (kakao_baseline으로 자동 판정, 규칙은 보완 2 이전과 같음)
     - 그 밖에 기준 original이 없으면 값을 빈칸으로 둔다
+    - group="condition": 조건·기준 모두 gray==False 행
+    - group="generator": 조건·기준 모두 "실제 gray==False + 같은 생성기 가짜 gray==False" 행
+    - gray_real은 계산하지 않는다
     """
-    rows = []
+    cond_out, gen_out = [], []
     for source, condition, g in _iter_condition_groups(predictions):
         if condition == ORIGINAL:
             continue
@@ -328,16 +457,31 @@ def compute_drop(predictions: pd.DataFrame) -> pd.DataFrame:
             if not len(base_rows):
                 base_rows = None
 
-        row = {"source": source, "condition": condition, "baseline": mode}
-        cond = group_metrics(g)
-        base = group_metrics(base_rows) if base_rows is not None else None
-        row["baseline_n_real"] = base["n_real"] if base else None
-        row["baseline_n_fake"] = base["n_fake"] if base else None
-        for metric, col, sign in DROP_METRICS:
-            row[col] = _pp_change(base[metric], cond[metric], sign) if base else None
-        rows.append(row)
+        head = {"source": source, "condition": condition, "generator": None, "train_generator": None}
+        cond_out.append(
+            _drop_row(
+                {"group": GROUP_CONDITION, **head},
+                mode,
+                _color_rows(g),
+                _color_rows(base_rows) if base_rows is not None else None,
+            )
+        )
+        for generator in _fake_generators(g):
+            gen_head = {
+                **head,
+                "generator": generator,
+                "train_generator": _train_generator_mark(generator, train_generators),
+            }
+            gen_out.append(
+                _drop_row(
+                    {"group": GROUP_GENERATOR, **gen_head},
+                    mode,
+                    _generator_rows(g, generator),
+                    _generator_rows(base_rows, generator) if base_rows is not None else None,
+                )
+            )
 
-    table = pd.DataFrame(rows, columns=DROP_COLUMNS)
+    table = pd.DataFrame(cond_out + gen_out, columns=DROP_COLUMNS)
     return table.astype(object).where(table.notna(), None)
 
 

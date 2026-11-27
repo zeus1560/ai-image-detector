@@ -1,6 +1,6 @@
 # SPEC-03: 조건별 평가
 
-- 상태: 구현 완료 (GenImage 대기) — 보완 2 확정, 구현 전
+- 상태: 구현 완료 (GenImage 대기)
 - 담당: 안승주
 - 관련 결정·실험: 데이터 계약 "manifest 열"·"규칙", DECISIONS.md "변형 조건", "분할과 저장", "모델 입력 규칙", SPEC-01a, SPEC-02, EXP-001
 
@@ -111,14 +111,14 @@ split 겹침 검사는 한 manifest 안에서만 보므로 이것을 잡지 못�
 - [x] split=test + checkpoint=last면 에러가 난다
 - [x] Wilson 구간이 손 계산 값(예: 100장 중 90 맞음)과 소수 4자리까지 같다
 - [x] kakao drop: 손으로 만든 표 세 가지에서 확인한다. 모두 연결(연결 방식 값이 손 계산과 같음) / 모두 미연결(전체 비교 값이 손 계산과 같음) / 일부만 연결(에러)
-- [ ] (보완 2) gray 열 없는 예전 predictions.csv를 읽으면 gray가 모두 False다. 새 형식은 쓰고 읽은 뒤 값이 같다. gray 빈 값은 에러다
-- [ ] (보완 2) 손으로 만든 표(실제 컬러·흑백, 생성기 2개, 흑백 가짜 포함)에서 condition 행이 gray==False 행만으로 계산된 손 계산 값과 같다
-- [ ] (보완 2) gray_real 행의 n_real·오탐 수·오탐률·Wilson 구간이 손 계산 값과 같고, 흑백 실제가 0장인 조건은 n_real=0, 오탐률 빈칸이다
-- [ ] (보완 2) generator 행의 n_real이 공유 실제(gray==False) 장수와 같고, 전체 지표가 손 계산 값과 같다. 생성기 행끼리 오탐률이 같다
-- [ ] (보완 2) train_generators=["g1"]이면 g1 행이 yes, g2 행이 no이고, 키가 없으면 빈칸이다
-- [ ] (보완 2) drop.csv의 generator 행 하락이 손 계산 값과 같다 (kakao 연결·전체 두 방식 모두)
-- [ ] (보완 2) (source, condition) 안에서 origin_id가 중복되면 에러가 난다
-- [ ] (보완 2) 기존 SPEC-03 A 테스트는 열 추가에 맞춘 기대값 수정 외에는 그대로 통과한다
+- [x] (보완 2) gray 열 없는 예전 predictions.csv를 읽으면 gray가 모두 False다. 새 형식은 쓰고 읽은 뒤 값이 같다. gray 빈 값은 에러다
+- [x] (보완 2) 손으로 만든 표(실제 컬러·흑백, 생성기 2개, 흑백 가짜 포함)에서 condition 행이 gray==False 행만으로 계산된 손 계산 값과 같다
+- [x] (보완 2) gray_real 행의 n_real·오탐 수·오탐률·Wilson 구간이 손 계산 값과 같고, 흑백 실제가 0장인 조건은 n_real=0, 오탐률 빈칸이다
+- [x] (보완 2) generator 행의 n_real이 공유 실제(gray==False) 장수와 같고, 전체 지표가 손 계산 값과 같다. 생성기 행끼리 오탐률이 같다
+- [x] (보완 2) train_generators=["g1"]이면 g1 행이 yes, g2 행이 no이고, 키가 없으면 빈칸이다
+- [x] (보완 2) drop.csv의 generator 행 하락이 손 계산 값과 같다 (kakao 연결·전체 두 방식 모두)
+- [x] (보완 2) (source, condition) 안에서 origin_id가 중복되면 에러가 난다
+- [x] (보완 2) 기존 SPEC-03 A 테스트는 열 추가에 맞춘 기대값 수정 외에는 그대로 통과한다
 
 ### B. Colab CIFAKE 실행 (cifake_baseline best.pt)
 - [x] split=val 평가의 정확도·오탐률·미탐률이 metrics.csv의 best epoch(2) 값과 같다 (같은 체크포인트·같은 데이터. 다르면 몇 장이 다른지와 그 이미지의 로짓을 기록하고 원인을 확인한다. AP·ROC-AUC는 1e-4 이내)

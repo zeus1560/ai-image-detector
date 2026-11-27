@@ -28,13 +28,15 @@ from src.model.eval_report import (
 
 
 def make_predictions(groups):
-    """groups: [(source, condition, [(origin_id, label, generator, pred), ...]), ...]
+    """groups: [(source, condition, [(origin_id, label, generator, pred[, gray]), ...]), ...]
 
     로짓은 pred가 1이면 양수, 0이면 음수. 행마다 크기를 조금씩 다르게 준다.
+    gray는 생략하면 False (SPEC-03 보완 2에서 predictions에 gray 열 추가).
     """
     rows = []
     for source, condition, items in groups:
-        for oid, label, generator, pred in items:
+        for oid, label, generator, pred, *rest in items:
+            gray = rest[0] if rest else False
             i = len(rows)
             logit = (1.0 + 0.1 * i) * (1 if pred == 1 else -1)
             rows.append(
@@ -49,6 +51,7 @@ def make_predictions(groups):
                     "logit": logit,
                     "score": 1 / (1 + math.exp(-logit)),
                     "pred": pred,
+                    "gray": gray,
                 }
             )
     return pd.DataFrame(rows, columns=PRED_COLUMNS)
@@ -97,6 +100,28 @@ EXPECTED_GENERATOR = {
     ("cifake", "jpeg50", "sd14"): (2, 2, 2 / 2),
 }
 
+# 보완 2: 생성기 행 = 그 (source, condition)의 공유 실제 전체 + 그 생성기 가짜 (손 표는 모두 gray=False)
+# (source, condition, generator): n_real, 오탐 수, 정확도, 오탐률, AP, ROC-AUC (손 계산)
+# 점수 순서는 make_predictions의 로짓 (1+0.1i)×(±1)로 정해진다
+EXPECTED_GENERATOR_FULL = {
+    # 실제 -1.0 -1.1 -1.2 +1.3 / sd14 +1.4 +1.5 +1.6 → 가짜가 모든 실제보다 큼
+    ("genimage", "original", "sd14"): (4, 1, 6 / 7, 1 / 4, 1.0, 1.0),
+    # mj +1.7 +1.8 −1.9: AUC 8/12, AP = 1/3 + 1/3 + (1/3)(3/7)
+    ("genimage", "original", "mj"): (4, 1, 5 / 7, 1 / 4, 17 / 21, 2 / 3),
+    # 실제 +2.0 +2.1 −2.2 −2.3 / sd14 +2.4 +2.5 −2.6
+    ("genimage", "jpeg75", "sd14"): (4, 2, 4 / 7, 2 / 4, 17 / 21, 2 / 3),
+    # mj +2.7 −2.8 −2.9: AUC 4/12, AP = 1/3 + (1/3)(2/6) + (1/3)(3/7)
+    ("genimage", "jpeg75", "mj"): (4, 2, 3 / 7, 2 / 4, 37 / 63, 1 / 3),
+    # 실제 −3.0~−3.3이 모든 가짜보다 큼: AUC 0, AP = (1/3)(1/5 + 2/6 + 3/7)
+    ("genimage", "jpeg50", "sd14"): (4, 0, 4 / 7, 0 / 4, 101 / 315, 0.0),
+    ("genimage", "jpeg50", "mj"): (4, 0, 4 / 7, 0 / 4, 101 / 315, 0.0),
+    ("cifake", "original", "sd14"): (2, 0, 4 / 4, 0 / 2, 1.0, 1.0),
+    # 실제 +4.4 −4.5 / sd14 +4.6 −4.7: AUC 2/4, AP = 1/2 + (1/2)(2/4)
+    ("cifake", "jpeg75", "sd14"): (2, 1, 2 / 4, 1 / 2, 3 / 4, 1 / 2),
+    # 실제 +4.8 +4.9 / sd14 −5.0 −5.1: AUC 0, AP = (1/2)(1/3) + (1/2)(2/4)
+    ("cifake", "jpeg50", "sd14"): (2, 2, 0 / 4, 2 / 2, 5 / 12, 0.0),
+}
+
 
 # ---------------------------------------------------------------- summary
 
@@ -121,20 +146,30 @@ def test_summary_condition_rows_match_hand_calc():
     assert list(cond["condition"])[:1] == ["original"]
 
 
-def test_summary_generator_rows_only_fake_generators():
-    """A3: 생성기별 행은 generator≠real만 있고, 미탐률이 손 계산과 같다."""
+def test_summary_generator_rows_shared_real_full_metrics():
+    """A3: 생성기별 행은 generator≠real만 있고, 미탐률이 손 계산과 같다.
+
+    보완 2: 생성기 행은 공유 실제 + 그 생성기 가짜로 전체 지표를 채운다 (손 계산 값과 같다).
+    공유 실제를 같이 쓰므로 같은 (source, condition)의 생성기 행끼리 오탐률이 같다.
+    """
     summary = summarize(HAND_TABLE)
     gen = summary[summary["group"] == "generator"]
     assert "real" not in set(gen["generator"])
     assert len(gen) == len(EXPECTED_GENERATOR)
     for _, r in gen.iterrows():
-        n_fake, n_fn, fnr = EXPECTED_GENERATOR[(r["source"], r["condition"], r["generator"])]
+        key = (r["source"], r["condition"], r["generator"])
+        n_fake, n_fn, fnr = EXPECTED_GENERATOR[key]
         assert (r["n_fake"], r["n_false_negative"]) == (n_fake, n_fn)
         assert r["false_negative_rate"] == pytest.approx(fnr)
-        # 생성기별 행에는 오탐률·정확도·AP·AUC를 쓰지 않는다
-        assert r["false_positive_rate"] is None
-        assert r["accuracy"] is None
-        assert r["ap"] is None and r["auc"] is None
+        # 생성기별 행에도 오탐률·정확도·AP·AUC가 채워져 있고 손 계산 값과 같다
+        n_real, n_fp, acc, fpr, ap, auc = EXPECTED_GENERATOR_FULL[key]
+        assert (r["n_real"], r["n_false_positive"]) == (n_real, n_fp)
+        assert r["false_positive_rate"] == pytest.approx(fpr)
+        assert r["accuracy"] == pytest.approx(acc)
+        assert r["ap"] == pytest.approx(ap) and r["auc"] == pytest.approx(auc)
+    # 같은 (source, condition)의 생성기 행끼리 오탐률이 같다
+    for _, g in gen.groupby(["source", "condition"]):
+        assert len(set(g["false_positive_rate"])) == 1
 
 
 def test_single_label_group_blanks():
@@ -171,7 +206,8 @@ def test_wilson_empty_and_edges():
 
 
 def drop_row(drop, source, condition):
-    r = drop[(drop["source"] == source) & (drop["condition"] == condition)]
+    # 보완 2: drop.csv에 generator 행이 생겨 같은 (source, condition)에 여러 행이 있으므로 condition 행만 본다
+    r = drop[(drop["group"] == "condition") & (drop["source"] == source) & (drop["condition"] == condition)]
     assert len(r) == 1
     return r.iloc[0]
 
@@ -179,7 +215,7 @@ def drop_row(drop, source, condition):
 def test_drop_matches_hand_calc_in_pp():
     """A5: 정확도·오탐률·미탐률 하락이 %p 손 계산 값과 같다."""
     drop = compute_drop(HAND_TABLE)
-    assert len(drop) == 4  # original 행은 없다
+    assert (drop["group"] == "condition").sum() == 4  # original 행은 없다
     # genimage original: 정확도 0.8, 오탐률 0.25, 미탐률 1/6
     r = drop_row(drop, "genimage", "jpeg75")
     assert r["baseline"] == BASELINE_SAME_SOURCE
@@ -273,6 +309,7 @@ def test_predictions_roundtrip_exact(tmp_path):
             "generator": ["real", "sd14", "mj", "real", "sd14"],
             "condition": ["original", "jpeg75", "jpeg75", "original", "resize50"],
             "origin_id": ["001", "002", "003", "004", "005"],  # 앞의 0이 사라지면 안 된다
+            "gray": [False, True, False, True, False],  # 보완 2 (manifest의 bool gray)
         },
         index=[10, 11, 25, 30, 42],
     )

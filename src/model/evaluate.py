@@ -30,6 +30,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms as T
 
 from . import eval_report as er
+from .config import TRAIN_GENERATORS_KEY
 from .dataset import ManifestDataset
 from .eval_config import (
     check_manifest_version,
@@ -165,6 +166,11 @@ def run(config: dict, sink: _LogSink | None = None) -> Path:
     if len(rows) == 0:
         raise ValueError(f"평가할 행이 없습니다 (split={config['split']}, source={config['source']})")
 
+    # 3-1. origin_id 중복 검사 (보완 2의 5). 대상은 평가하는 split(과 source)으로 거른 행이고,
+    #      (source, condition)별로 본다. 다른 split·다른 condition의 같은 origin_id는 중복이 아니다.
+    #      출력 폴더를 만들기 전에 멈추도록 여기서 한다
+    dup_msg = er.check_unique_origin_per_condition(rows)
+
     # 4. manifest 버전 확인 (처리 방식 5)
     version_msg = check_manifest_version(
         rows,
@@ -180,7 +186,7 @@ def run(config: dict, sink: _LogSink | None = None) -> Path:
         if sink is not None:
             sink.attach(log_file)
         try:
-            _evaluate(config, record, base, rows, version_msg, out_dir)
+            _evaluate(config, record, base, rows, version_msg + "\n" + dup_msg, out_dir)
         except BaseException:
             # 에러 traceback을 eval_log.txt에 남긴다.
             # 화면에는 raise 뒤 파이썬이 출력한다 (여기서 화면에도 쓰면 두 번 나온다)
@@ -235,6 +241,12 @@ def _evaluate(config, record, base, rows, version_msg, out_dir: Path) -> None:
     if device.type != "cuda":
         print("경고: GPU 없음, CPU로 평가합니다 (Colab 런타임 유형을 확인하세요)")
     print("실행 환경:", json.dumps(env, ensure_ascii=False))
+    # 보완 2의 3: 학습 생성기 표시 (학습 기록에 키가 없으면(CIFAKE) 표시하지 않음)
+    train_generators = record.get(TRAIN_GENERATORS_KEY)
+    if train_generators is None:
+        print("train_generators 없음 → 학습 생성기 표시 안 함")
+    else:
+        print(f"train_generators (학습 기록): {train_generators}")
 
     # 6. 중앙 크롭 → ToTensor → Normalize (SPEC-02 1절과 같다)
     to_tensor = T.Compose([T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
@@ -262,13 +274,17 @@ def _evaluate(config, record, base, rows, version_msg, out_dir: Path) -> None:
     print(f"추론 {len(predictions)}장, {time.time() - start:.1f}s → predictions.csv")
 
     # 8. summary.csv, drop.csv
-    summary = er.summarize(predictions)
-    drop = er.compute_drop(predictions)
+    summary = er.summarize(predictions, train_generators)
+    drop = er.compute_drop(predictions, train_generators)
     er.write_table(out_dir / "summary.csv", summary)
     er.write_table(out_dir / "drop.csv", drop)
 
-    _print_table("[summary] 조건별 지표", summary[summary["group"] == "condition"])
-    _print_table("[summary] 생성기별 미탐률", summary[summary["group"] == "generator"])
+    _print_table("[summary] 조건별 지표 (gray==False)", summary[summary["group"] == er.GROUP_CONDITION])
+    _print_table("[summary] 흑백 실제 오탐률 (참고용)", summary[summary["group"] == er.GROUP_GRAY_REAL])
+    _print_table(
+        "[summary] 생성기별 지표 (공유 실제 + 그 생성기 가짜, gray==False)",
+        summary[summary["group"] == er.GROUP_GENERATOR],
+    )
     _print_table("[drop] 원본 대비 변화 (%p)", drop)
     for mode in dict.fromkeys(drop["baseline"]):
         print(f"drop 기준 {mode}: {er.BASELINE_DESCRIPTIONS[mode]}")
