@@ -1,6 +1,6 @@
 # SPEC-01a: manifest 로더와 검증
 
-- 상태: 구현 완료 (v3)
+- 상태: 구현 완료 (v3.1)
 - 담당: 안승주
 - 관련 결정·실험: docs/spec/data-contract.md, DECISIONS.md "SPEC-01 분리", "manifest 운영", "색상 모드"
 
@@ -134,4 +134,4 @@ split 간 origin_id 겹침을 학습 전에 자동으로 차단해서, 핵심 �
 - v1 (a1fcc20 확정, 95365bb 구현 완료): 최초 버전
 - v2 (2e67b1b 확정, 구현 완료): color_mode 열 추가, manifest 해시 출력 추가 (9주차 회의 후속)
 - v3 (d6d7c14 확정, 구현 완료): gray 선택 열 검증, 흑백 실제의 train/val 배정 검사, gray 장수표 (흑백 규칙 11/26 합의, 계약 fc748cc)
-- v3.1: 흑백 장수를 original 기준(사진 수)으로 정정
+- v3.1: 흑백 장수를 original 기준(사진 수)으로 정정 (3587e31)
