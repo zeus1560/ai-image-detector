@@ -247,12 +247,14 @@ def validate(df: pd.DataFrame, data_root, check_files="all") -> None:
             f"[5] 흑백 실제(label=real, gray=True)인데 split이 train/val인 행 {len(bad_gray)}개. 예: {examples}"
         )
     log.append(f"train/val 흑백 실제 {len(bad_gray)}개")
-    n_gray_real_test = int((is_real & gray & (df["split"] == "test")).sum())
-    fake_gray = df[(df["label"] == "fake") & gray]
+    # 흑백 장수는 original 행 기준(사진 수)으로 센다 (v3.1). 변형본 행은 같은 사진이라 세지 않는다
+    gray_orig = df[gray & (df["condition"] == "original")]
+    n_gray_real_test = int(((gray_orig["label"] == "real") & (gray_orig["split"] == "test")).sum())
+    fake_gray = gray_orig[gray_orig["label"] == "fake"]
     fake_counts = " / ".join(
         f"{s} {int((fake_gray['split'] == s).sum())}장" for s in ("train", "val", "test")
     )
-    log.append(f"흑백 행: 실제 test {n_gray_real_test}장, 가짜 {fake_counts}")
+    log.append(f"흑백 원본(original): 실제 test {n_gray_real_test}장, 가짜 {fake_counts}")
 
     if violations:
         error_cls = LeakageError if overlap_ids else ManifestValidationError
@@ -265,16 +267,22 @@ def validate(df: pd.DataFrame, data_root, check_files="all") -> None:
         print(f"  - {line}")
 
 
-def gray_count_table(df: pd.DataFrame) -> pd.DataFrame:
-    """label × split × gray 장수표 (v3). 행: (label, split), 열: False, True."""
-    table = pd.crosstab([df["label"], df["split"]], df[GRAY_COLUMN])
+def gray_count_table(df: pd.DataFrame) -> pd.DataFrame | None:
+    """condition == original 행만으로 만든 label × split × gray 장수표 (v3.1, 사진 수 기준).
+
+    행: (label, split), 열: False, True. original 행이 없으면 None.
+    """
+    original = df[df["condition"] == "original"]
+    if len(original) == 0:
+        return None
+    table = pd.crosstab([original["label"], original["split"]], original[GRAY_COLUMN])
     return table.reindex(columns=[False, True], fill_value=0)
 
 
 def summary(df: pd.DataFrame) -> pd.DataFrame:
     """label × condition × split 장수표를 출력하고 반환한다.
 
-    그 다음 label × split × gray 장수표를 출력한다 (v3, 반환값은 바꾸지 않음).
+    그 다음 original 행만으로 label × split × gray 장수표를 출력한다 (v3.1, 반환값은 바꾸지 않음).
     original 조건에서 label별 format·크기 분포를 출력하고,
     label 사이에 분포가 다르면 경고만 한다 (멈추지 않는다).
     """
@@ -284,8 +292,12 @@ def summary(df: pd.DataFrame) -> pd.DataFrame:
     print("[장수표] label × condition × split")
     print(table.to_string())
 
-    print("[장수표] label × split × gray")
-    print(gray_count_table(df).to_string())
+    gray_table = gray_count_table(df)
+    if gray_table is None:
+        print("[장수표] label × split × gray (original): original 조건 행이 없습니다")
+    else:
+        print("[장수표] label × split × gray (original)")
+        print(gray_table.to_string())
 
     original = df[df["condition"] == "original"]
     if len(original) == 0:

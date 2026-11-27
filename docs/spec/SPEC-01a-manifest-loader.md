@@ -60,12 +60,14 @@ split 간 origin_id 겹침을 학습 전에 자동으로 차단해서, 핵심 �
   5. label == real, gray == True인데 split이 train 또는 val → ManifestValidationError (LeakageError 아님)
      (계약: train/val의 흑백 실제 사진은 컬러 reserve로 교체됨. 남아 있으면 "흑백이면 진짜" 지름길이 생김)
      흑백 가짜(gray=True, fake)는 어느 split에 있어도 위반이 아니다.
-  통과 로그에 "train/val 흑백 실제 0개"와 "흑백 행: 실제 test n장, 가짜 split별 장수"를 추가한다.
+  통과 로그에 "train/val 흑백 실제 0개"(위반 검사와 같이 모든 행 대상)와
+  "흑백 원본(original): 실제 test n장, 가짜 train a장 / val b장 / test c장"(condition == original 행 기준)을 추가한다.
   통과하면 "split 겹침 origin_id 0개"를 포함한 검사 결과를 출력한다.
 - summary(df): label × condition × split 장수표.
   original 조건에서 label별 format·크기 분포를 출력한다.
   (분포가 다르면 경고만 하고 멈추지 않는다)
-  기존 표 다음에 label × split × gray 장수표를 출력한다. (흑백 실제 test 장수 n을 여기서 확인)
+  기존 표 다음에 condition == original 행만으로 label × split × gray 장수표를 출력한다. (흑백 실제 test 장수 n을 여기서 확인)
+  original 행이 없으면 "original 조건 행이 없습니다"를 출력한다.
 - filter(df, source=None, condition=None, split=None): 조건에 맞는 행만 반환
 
 ### dataset.py: ManifestDataset
@@ -106,8 +108,9 @@ split 간 origin_id 겹침을 학습 전에 자동으로 차단해서, 핵심 �
 - [x] (v3) 빈 값과 허용값 밖 값이 함께 있으면 에러 하나에 두 위반이 모두 나온다
 - [x] (v3) real·gray=True가 train(또는 val)에 있으면 ManifestValidationError가 나고 LeakageError는 아니다
 - [x] (v3) real·gray=True가 test에만 있고 fake·gray=True가 train에 있는 manifest는 통과한다
-- [x] (v3) summary의 label × split × gray 표에서 (real, test, True) 칸이 df로 직접 센 장수와 같다
+- [x] (v3) summary의 label × split × gray 표에서 (real, test, True) 칸이 original 행에서 직접 센 장수와 같다
 - [x] (v3) v2의 기존 테스트가 모두 변경 없이 통과한다 (gray 열 없는 픽스처 그대로)
+- [x] (v3.1) 변형본(jpeg75 등) 행을 추가해도 표와 로그의 흑백 숫자가 바뀌지 않는다
 
 ## 테스트 방법
 - 로컬 CPU: 테스트 안에서 임시 폴더에 8×8 크기의 가짜 이미지 몇 장과 작은 manifest CSV를 만들어 위 완료 기준을 확인한다.
@@ -125,8 +128,10 @@ split 간 origin_id 겹침을 학습 전에 자동으로 차단해서, 핵심 �
 1. (해결됨 → v3) 흑백 규칙은 "color_mode=L 금지"가 아니라 gray 열 기준으로 검사한다
 2. color_mode 허용값에 other 추가 (계약 합의 후 확인)
 3. color_mode=L인데 gray=False인 행을 위반으로 볼지 (판정 기준과 GRAY_CHROMA_TH가 계약 미해결이라 보류)
+4. gray가 같은 origin_id 안에서 항상 같은 값인지 (original 판정을 변형본이 물려받는지). 계약 합의 후 확인. 정해지면 origin_id 단위 일치 검사를 넣을지 정한다
 
 ## 변경 이력
 - v1 (a1fcc20 확정, 95365bb 구현 완료): 최초 버전
 - v2 (2e67b1b 확정, 구현 완료): color_mode 열 추가, manifest 해시 출력 추가 (9주차 회의 후속)
 - v3 (d6d7c14 확정, 구현 완료): gray 선택 열 검증, 흑백 실제의 train/val 배정 검사, gray 장수표 (흑백 규칙 11/26 합의, 계약 fc748cc)
+- v3.1: 흑백 장수를 original 기준(사진 수)으로 정정

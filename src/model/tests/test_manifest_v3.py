@@ -4,11 +4,13 @@ conftest.py와 v1·v2 테스트는 고치지 않는다 (gray 없는 픽스처가
 gray 열이 필요한 manifest는 이 파일 안에서 행에 gray를 붙여 만든다.
 """
 
+import csv
 import hashlib
 
 import pytest
+from PIL import Image
 
-from conftest import valid_rows
+from conftest import make_row, valid_rows
 from src.model import manifest as mf
 from src.model.dataset import ManifestDataset
 from src.model.manifest import LeakageError, ManifestValidationError
@@ -135,10 +137,11 @@ def test_gray_real_test_only_and_gray_fake_train_passes(build, capsys):
     mf.validate(df, data_root)
     out = capsys.readouterr().out
     assert "train/val 흑백 실제 0개" in out
-    assert "흑백 행: 실제 test 2장, 가짜 train 2장 / val 0장 / test 0장" in out
+    # v3.1: original 행 기준 (r3·f0 각각 original 1행 + jpeg75 1행 → 사진 1장씩)
+    assert "흑백 원본(original): 실제 test 1장, 가짜 train 1장 / val 0장 / test 0장" in out
 
 
-# v3-9: summary의 label × split × gray 표에서 (real, test, True) 칸 == df로 직접 센 장수
+# v3-9 (v3.1 정정): summary의 label × split × gray 표에서 (real, test, True) 칸 == original 행에서 직접 센 장수
 def test_summary_gray_table_matches_direct_count(build, capsys):
     rows = gray_rows()
     for r in rows:
@@ -150,16 +153,17 @@ def test_summary_gray_table_matches_direct_count(build, capsys):
 
     returned = mf.summary(df)
     out = capsys.readouterr().out
-    assert "[장수표] label × split × gray" in out
+    assert "[장수표] label × split × gray (original)" in out
 
     table = mf.gray_count_table(df)
-    direct = int(((df["label"] == "real") & (df["split"] == "test") & df["gray"]).sum())
-    assert direct == 3  # r3 두 행 + k0
+    orig = df[df["condition"] == "original"]
+    direct = int(((orig["label"] == "real") & (orig["split"] == "test") & orig["gray"]).sum())
+    assert direct == 1  # r3 original만 (r3 jpeg75, k0(kakao 조건)은 세지 않음)
     assert table.loc[("real", "test"), True] == direct
     for (label, split), row in table.iterrows():
-        sel = (df["label"] == label) & (df["split"] == split)
-        assert row[True] == int((sel & df["gray"]).sum())
-        assert row[False] == int((sel & ~df["gray"]).sum())
+        sel = (orig["label"] == label) & (orig["split"] == split)
+        assert row[True] == int((sel & orig["gray"]).sum())
+        assert row[False] == int((sel & ~orig["gray"]).sum())
     # summary 반환값은 기존 표(label × condition × split) 그대로
     assert list(returned.index.names) == ["label", "condition"]
 
@@ -170,6 +174,66 @@ def test_gray_table_has_both_columns_when_all_false(build):
     table = mf.gray_count_table(df)
     assert list(table.columns) == [False, True]
     assert (table[True] == 0).all()
+
+
+def _gray_log_line(out: str) -> str:
+    lines = [ln for ln in out.splitlines() if "흑백 원본(original)" in ln]
+    assert len(lines) == 1, out
+    return lines[0]
+
+
+# v3.1: 변형본(jpeg75 등) 행을 추가해도 표와 로그의 흑백 숫자가 바뀌지 않는다
+def test_variant_rows_do_not_change_gray_counts(tmp_path_factory, capsys):
+    def gray_flag(r):
+        # 흑백: 실제 r3(test), 가짜 f0(train)·f2(val)·f3(test)
+        return "True" if r["origin_id"] in {"r3", "f0", "f2", "f3"} else "False"
+
+    def run(rows):
+        root =tmp_path_factory.mktemp("data")
+        for r in rows:
+            p = root / r["path"]
+            p.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (8, 8)).save(p, format="PNG")
+        path = root / "manifest.csv"
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=GRAY_COLUMNS)
+            w.writeheader()
+            w.writerows(rows)
+        df = mf.load_manifest(path, root)
+        capsys.readouterr()
+        mf.validate(df, root)
+        line = _gray_log_line(capsys.readouterr().out)
+        return mf.gray_count_table(df), line
+
+    originals = [r for r in valid_rows() if r["condition"] == "original"]
+    for r in originals:
+        r["gray"] = gray_flag(r)
+    table_a, line_a = run(originals)
+
+    with_variants = [dict(r) for r in originals]
+    for r in originals:
+        for cond in ("jpeg75", "jpeg50", "resize50"):
+            v = make_row(r["origin_id"], r["label"], r["split"], condition=cond)
+            v["gray"] = r["gray"]
+            with_variants.append(v)
+    table_b, line_b = run(with_variants)
+
+    assert line_a == line_b
+    assert "흑백 원본(original): 실제 test 1장, 가짜 train 1장 / val 1장 / test 1장" in line_a
+    assert table_a.equals(table_b)
+    assert table_a.loc[("real", "test"), True] == 1
+
+
+# v3.1: original 행이 없으면 표 대신 "original 조건 행이 없습니다"
+def test_gray_table_without_original_rows(build, capsys):
+    rows = [r for r in gray_rows() if r["condition"] != "original"]
+    manifest_path, data_root = build(rows, columns=GRAY_COLUMNS)
+    df = mf.load_manifest(manifest_path, data_root)
+    assert mf.gray_count_table(df) is None
+    capsys.readouterr()
+    mf.summary(df)
+    out = capsys.readouterr().out
+    assert "[장수표] label × split × gray (original): original 조건 행이 없습니다" in out
 
 
 # dataset.py는 바꾸지 않는다: filter가 gray 열을 그대로 넘기는지 확인
