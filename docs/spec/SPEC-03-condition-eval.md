@@ -1,6 +1,6 @@
 # SPEC-03: 조건별 평가
 
-- 상태: 구현 완료 (GenImage 대기)
+- 상태: 구현 완료 (GenImage 대기) — 보완 2 확정, 구현 전
 - 담당: 안승주
 - 관련 결정·실험: 데이터 계약 "manifest 열"·"규칙", DECISIONS.md "변형 조건", "분할과 저장", "모델 입력 규칙", SPEC-01a, SPEC-02, EXP-001
 
@@ -111,6 +111,14 @@ split 겹침 검사는 한 manifest 안에서만 보므로 이것을 잡지 못�
 - [x] split=test + checkpoint=last면 에러가 난다
 - [x] Wilson 구간이 손 계산 값(예: 100장 중 90 맞음)과 소수 4자리까지 같다
 - [x] kakao drop: 손으로 만든 표 세 가지에서 확인한다. 모두 연결(연결 방식 값이 손 계산과 같음) / 모두 미연결(전체 비교 값이 손 계산과 같음) / 일부만 연결(에러)
+- [ ] (보완 2) gray 열 없는 예전 predictions.csv를 읽으면 gray가 모두 False다. 새 형식은 쓰고 읽은 뒤 값이 같다. gray 빈 값은 에러다
+- [ ] (보완 2) 손으로 만든 표(실제 컬러·흑백, 생성기 2개, 흑백 가짜 포함)에서 condition 행이 gray==False 행만으로 계산된 손 계산 값과 같다
+- [ ] (보완 2) gray_real 행의 n_real·오탐 수·오탐률·Wilson 구간이 손 계산 값과 같고, 흑백 실제가 0장인 조건은 n_real=0, 오탐률 빈칸이다
+- [ ] (보완 2) generator 행의 n_real이 공유 실제(gray==False) 장수와 같고, 전체 지표가 손 계산 값과 같다. 생성기 행끼리 오탐률이 같다
+- [ ] (보완 2) train_generators=["g1"]이면 g1 행이 yes, g2 행이 no이고, 키가 없으면 빈칸이다
+- [ ] (보완 2) drop.csv의 generator 행 하락이 손 계산 값과 같다 (kakao 연결·전체 두 방식 모두)
+- [ ] (보완 2) (source, condition) 안에서 origin_id가 중복되면 에러가 난다
+- [ ] (보완 2) 기존 SPEC-03 A 테스트는 열 추가에 맞춘 기대값 수정 외에는 그대로 통과한다
 
 ### B. Colab CIFAKE 실행 (cifake_baseline best.pt)
 - [x] split=val 평가의 정확도·오탐률·미탐률이 metrics.csv의 best epoch(2) 값과 같다 (같은 체크포인트·같은 데이터. 다르면 몇 장이 다른지와 그 이미지의 로짓을 기록하고 원인을 확인한다. AP·ROC-AUC는 1e-4 이내)
@@ -118,12 +126,15 @@ split 겹침 검사는 한 manifest 안에서만 보므로 이것을 잡지 못�
 - [x] summary.csv에 (cifake, original) 행이 있고, AP·ROC-AUC가 같은 predictions.csv로 sklearn 계산값과 같다
 - [x] 같은 eval_name으로 다시 실행하면 에러가 나고 기존 결과 파일이 바뀌지 않는다
 - [x] docs/experiments/에 기록을 남긴다 (CIFAKE 결과는 발표 수치로 쓰지 않는다)
+- [ ] (보완 2) EXP-002의 test predictions.csv(예전 형식)로 summary를 다시 만들면 condition 행 값이 EXP-002 기록과 같다
 
 ### C. Colab GenImage 실행 (manifest.csv 준비 후)
 - [ ] val과 test 각각에서 original, jpeg90/75/50/30, resize50 그룹이 summary.csv에 있고, 각 그룹의 n_real·n_fake가 manifest 요약표와 같다
 - [ ] drop.csv에서 조건별 하락이 계산된다 (값은 실행 결과에서 옮겨 적는다)
 - [ ] kakao·latest가 manifest에 있으면 그 그룹도 summary.csv에 있다
 - [ ] docs/experiments/에 GenImage 베이스라인 조건별 평가 기록을 남긴다
+- [ ] (보완 2) summary.csv의 gray_real 행 n_real이 manifest의 실제 test gray==True 장수(n)와 같다
+- [ ] (보완 2) generator 행마다 n_real이 같고, n_fake가 생성기별 test gray==False 장수와 같다
 
 A·B가 끝나고 C만 남으면 상태를 "구현 완료 (GenImage 대기)"로 둔다.
 
@@ -149,12 +160,55 @@ A·B가 끝나고 C만 남으면 상태를 "구현 완료 (GenImage 대기)"로 
 5. 장수가 적은 그룹(kakao·latest 50~100장)의 신뢰구간(예: Wilson 95%)을 summary에 넣을지. 넣지 않으면 개수만 함께 보고한다 (결정: 비율 지표에 Wilson 95% 구간, 처리 방식 3)
 6. 같은 origin_id의 조건 간 쌍 비교 (예: original에서 맞혔는데 jpeg50에서 틀린 비율)를 넣을지. predictions.csv에 origin_id가 있어 나중에 계산할 수 있다 (결정: 범위 밖)
 7. 평가할 체크포인트: best.pt만 / best와 last 둘 다 (SPEC-04 비교 기준과 같이 정해야 함) (결정: test는 best만, val은 best·last 허용. 입력 1)
+8. 생성기 구성과 교차 test 장수 (계약 합의 후 확인, SPEC-02 미해결 9와 같음)
+9. 테스트 입력을 512 전체로 할지 (계약 "모델 측 입력 규칙", 계약 합의 후 확인). 지금은 SPEC-02와 같은 중앙 크롭 256
 
 ## 확정 후 보완 1 (2026-11-21, A 구현 후, 동작·완료 기준 변경 없음)
 구현하면서 정한 출력 형식을 기록한다. SPEC-04와 실험 기록은 이 형식을 따른다.
 1. predictions.csv의 label은 pred와 같은 0(real)/1(fake) 정수다 (manifest의 label은 real/fake 문자열).
-2. summary.csv는 한 파일에 두 그룹을 담고 group 열(condition / generator)로 구분한다. generator 행은 미탐률과 그 Wilson 구간만 채운다.
+2. summary.csv는 한 파일에 두 그룹을 담고 group 열(condition / generator)로 구분한다. generator 행은 미탐률과 그 Wilson 구간만 채운다. (보완 2에서 group 값이 condition / gray_real / generator 셋이 되고, generator 행은 전체 지표로 바뀜)
 3. drop.csv의 열 이름은 하락(…_drop_pp)과 증가(…_increase_pp)를 구분한다. 값은 반올림하지 않는다.
    baseline 열(기준 방식)과 baseline_n_real·baseline_n_fake 열(기준 그룹 장수)을 함께 쓴다.
 4. 포맷 편향 경고는 (source, condition)별 real·fake의 확장자 비율이 다르면 낸다. 한 라벨만 있는 그룹은 비교하지 않는다.
 5. 출력 폴더 생성과 manifest 버전 확인은 eval_config.py에 둔다.
+
+## 확정 후 보완 2 (2026-11-27, 흑백 분리와 생성기별 지표, 동작 변경 있음)
+GenImage test는 공유 실제 750장(계약 잠정, 미확인)에 생성기마다 가짜가 붙어 (source, condition) 그룹이 real:fake 1:3이 된다.
+그러면 정확도·AP가 가짜 쪽으로 치우치고, X가 test에 넣은 생성기 수에 따라 바뀐다.
+또 계약상 test에는 흑백 실제 사진이 gray=True로 남는다. 이를 대표 지표와 분리한다.
+
+1. predictions.csv에 gray 열 (맨 끝)
+   - 값은 문자열 True / False. ManifestDataset.df의 gray(SPEC-01a v3, bool)에서 가져온다.
+   - 읽기: 헤더가 새 열 목록이면 gray 값이 정확히 True/False인지 검사한다 (빈 값이 먼저 에러).
+     헤더가 예전 열 목록(gray 없음)이면 전부 False로 읽고 "gray 열 없는 예전 파일" 로그를 낸다.
+     두 목록 외의 헤더는 지금처럼 에러.
+
+2. summary.csv 그룹 (group 열 값 3가지)
+   a. condition (대표 지표): (source, condition)에서 gray == False인 행만. 지표는 지금과 같다.
+      생성기를 모두 섞은 값이라 real:fake 비율이 생성기 수에 따라 달라진다. X는 여기서 가져오지 않는다 (4번).
+      kakao·latest·CIFAKE처럼 생성기 구분 의미가 약한 출처의 기본 보고 단위로 남긴다.
+   b. gray_real (신규): (source, condition)에서 label == real & gray == True인 행.
+      n_real, 오탐 수, 오탐률과 Wilson 구간만 채운다. 실제 행이 있는 모든 (source, condition)에 한 행씩 쓰고,
+      흑백 실제가 0장이면 n_real=0, 오탐률은 빈칸이다. n이 작으면 참고용이다 (계약 "흑백 처리").
+   c. generator (변경): (source, condition, generator ≠ real)마다
+      "그 (source, condition)의 실제 gray == False 전체 + 그 생성기의 가짜 gray == False" 행으로 전체 지표를 계산한다.
+      (이전: 그 생성기 가짜만으로 미탐률만)
+      공유 실제를 모든 생성기 행에서 같이 쓰므로, 생성기 행끼리 오탐률은 같고 미탐률·정확도·AP·AUC가 다르다.
+   흑백 가짜(fake, gray == True)는 a·c 어디에도 들어가지 않는다. 흑백 가짜 미탐률은 따로 보지 않는다.
+
+3. summary.csv·drop.csv에 train_generator 열 (신규)
+   - run_dir/config.json에 train_generators가 있으면 generator 행에 yes / no, 나머지 행은 빈칸
+   - 키가 없으면(CIFAKE) 모든 행 빈칸, 로그에 "train_generators 없음 → 학습 생성기 표시 안 함"
+
+4. drop.csv도 생성기별
+   - group 열(condition / generator)을 추가하고, 2-a와 2-c 그룹 각각 original 대비 하락을 계산한다.
+     기준 그룹도 같은 방식으로 만든다 (generator 행의 기준 = 같은 source original의 실제 gray==False + 같은 생성기 가짜 gray==False).
+   - kakao 기준 방식(연결/전체/에러 자동 판정)은 지금 규칙 그대로이고, generator 행에서는 기준 행을 같은 생성기 가짜와 실제로 제한한다.
+   - gray_real은 drop을 계산하지 않는다 (장수가 적어서).
+   - 핵심 문장의 X는 drop.csv에서 group == generator, source == genimage, train_generator == yes 행에서 가져온다.
+     이 정의는 test 평가 전에 정하고 test 결과를 보고 바꾸지 않는다 (처리 방식 6).
+     교차 생성기 행(train_generator == no)은 일반화 결과로 따로 보고한다.
+
+5. 누수·중복 검사 추가 (평가 시작 시, 어기면 에러)
+   - 평가 대상 행에서 (source, condition) 안에 같은 origin_id가 두 번 이상 나오면 에러.
+     공유 실제 사진이 생성기마다 따로 등록되면 생성기 행에서 같은 사진이 중복으로 세어지기 때문이다.

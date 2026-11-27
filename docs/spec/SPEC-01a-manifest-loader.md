@@ -1,6 +1,6 @@
 # SPEC-01a: manifest 로더와 검증
 
-- 상태: 구현 완료 (v2)
+- 상태: 확정 (v3)
 - 담당: 안승주
 - 관련 결정·실험: docs/spec/data-contract.md, DECISIONS.md "SPEC-01 분리", "manifest 운영", "색상 모드"
 
@@ -29,6 +29,18 @@ split 간 origin_id 겹침을 학습 전에 자동으로 차단해서, 핵심 �
   - color_mode 허용값: RGB / L / CMYK (변환 전 원본의 PIL 모드. 저장 파일은 모두 RGB)
   실패하면 문제가 된 열과 행 번호를 담은 에러를 낸다.
   읽을 때 manifest 경로, 행 수, 파일의 sha256 해시를 출력한다.
+  - gray는 선택 열이다 (REQUIRED_COLUMNS는 11개 그대로).
+  - gray 열이 없으면: 모든 행을 False로 채우고 로그에 "gray 열 없음 → 전부 False (행 N개)"를 출력한다.
+    파일은 건드리지 않으므로 sha256은 그대로다. (cifake_manifest.csv 대상)
+  - gray 열이 있으면 아래 순서로 검사한다.
+    1. 빈 값('' 또는 공백만) 행 → 빈 값 위반으로 따로 모은다
+    2. 빈 값이 아닌 행 중 값이 정확히 'True' / 'False'가 아닌 행 → 허용값 위반
+       ('true', 'TRUE', '1', ' True', 'nan' 모두 위반. 공백 제거·대소문자 변환을 하지 않는다)
+    빈 값 검사를 문자열 비교보다 먼저 한다. 빈 값이 비교에서 조용히 False로 처리되지 않게 하기 위함이다.
+    위반은 기존 허용값 검사 위반과 함께 모아 ManifestValidationError 하나로 보고한다 (열 이름, 줄 번호, 빈 값/허용값 구분 포함).
+  - 통과하면 gray 열을 bool(True/False)로 바꿔 df에 담는다.
+    df.attrs["gray_column"]에 "present" 또는 "absent"를 기록한다.
+  - 열 위치(마지막 열인지)는 검사하지 않는다. 열 이름으로 읽는다.
 - manifest_sha256(path): manifest 파일 바이트 전체의 sha256 값을 반환한다.
   (manifest.csv는 바뀔 때마다 data/manifests/manifest_vN.csv로 스냅샷이 남으므로,
    출력된 해시를 스냅샷과 대조해 실험에 쓴 버전을 확인한다)
@@ -45,10 +57,15 @@ split 간 origin_id 겹침을 학습 전에 자동으로 차단해서, 핵심 �
   4. path가 가리키는 파일이 없음
      - check_files="all": 전체 검사 (기본값)
      - check_files=정수 n: seed로 고정한 n개만 검사. 샘플 검사라는 사실을 로그에 출력한다
+  5. label == real, gray == True인데 split이 train 또는 val → ManifestValidationError (LeakageError 아님)
+     (계약: train/val의 흑백 실제 사진은 컬러 reserve로 교체됨. 남아 있으면 "흑백이면 진짜" 지름길이 생김)
+     흑백 가짜(gray=True, fake)는 어느 split에 있어도 위반이 아니다.
+  통과 로그에 "train/val 흑백 실제 0개"와 "흑백 행: 실제 test n장, 가짜 split별 장수"를 추가한다.
   통과하면 "split 겹침 origin_id 0개"를 포함한 검사 결과를 출력한다.
 - summary(df): label × condition × split 장수표.
   original 조건에서 label별 format·크기 분포를 출력한다.
   (분포가 다르면 경고만 하고 멈추지 않는다)
+  기존 표 다음에 label × split × gray 장수표를 출력한다. (흑백 실제 test 장수 n을 여기서 확인)
 - filter(df, source=None, condition=None, split=None): 조건에 맞는 행만 반환
 
 ### dataset.py: ManifestDataset
@@ -81,6 +98,16 @@ split 간 origin_id 겹침을 학습 전에 자동으로 차단해서, 핵심 �
 - [x] load_manifest가 출력하는 sha256이 hashlib로 따로 계산한 파일 해시와 같고, 파일을 1바이트만 바꿔도 값이 달라진다
 - [x] ManifestDataset.manifest_sha256이 load_manifest가 출력한 값과 같다
 - [x] v1의 기존 테스트가 모두 그대로 통과한다 (테스트용 manifest에 color_mode 열 추가 외에는 변경 없이)
+- [ ] (v3) gray 열이 없는 manifest는 오류 없이 읽히고, 모든 행의 gray가 False이며, 로그에 "gray 열 없음"이 나온다
+- [ ] (v3) gray 열이 없는 manifest를 읽기 전후로 파일 sha256이 같다
+- [ ] (v3) gray가 'True'/'False'인 manifest를 읽으면 df["gray"]가 bool이고 값이 파일과 같다
+- [ ] (v3) gray 칸이 빈 행이 있으면 ManifestValidationError가 나고, 메시지에 "gray", 줄 번호, 빈 값이라는 표시가 있다 (False로 읽히지 않는다)
+- [ ] (v3) gray가 'true', 'TRUE', '1', ' True' 중 하나인 행이 있으면 각각 열 이름과 줄 번호가 담긴 허용값 에러가 난다
+- [ ] (v3) 빈 값과 허용값 밖 값이 함께 있으면 에러 하나에 두 위반이 모두 나온다
+- [ ] (v3) real·gray=True가 train(또는 val)에 있으면 ManifestValidationError가 나고 LeakageError는 아니다
+- [ ] (v3) real·gray=True가 test에만 있고 fake·gray=True가 train에 있는 manifest는 통과한다
+- [ ] (v3) summary의 label × split × gray 표에서 (real, test, True) 칸이 df로 직접 센 장수와 같다
+- [ ] (v3) v2의 기존 테스트가 모두 변경 없이 통과한다 (gray 열 없는 픽스처 그대로)
 
 ## 테스트 방법
 - 로컬 CPU: 테스트 안에서 임시 폴더에 8×8 크기의 가짜 이미지 몇 장과 작은 manifest CSV를 만들어 위 완료 기준을 확인한다.
@@ -91,11 +118,15 @@ split 간 origin_id 겹침을 학습 전에 자동으로 차단해서, 핵심 �
 - CIFAKE를 manifest로 변환하는 일 (SPEC-01b)
 - 학습·평가·증강 (SPEC-02~04)
 - 정규화와 입력 크기 결정 (SPEC-02)
+- 흑백 판정 자체 (L 모드·채도 기준 GRAY_CHROMA_TH). 데이터 측이 한다
+- gray 기준 평가 지표 (SPEC-03 보완 2)
 
 ## 미해결
-1. 흑백(A안) 규칙: "color_mode=L은 train/val에 없어야 한다" 검사를 넣을지는
-   test 처리 방식이 정해진 뒤 결정한다 (데이터 계약 미해결 항목)
+1. (해결됨 → v3) 흑백 규칙은 "color_mode=L 금지"가 아니라 gray 열 기준으로 검사한다
+2. color_mode 허용값에 other 추가 (계약 합의 후 확인)
+3. color_mode=L인데 gray=False인 행을 위반으로 볼지 (판정 기준과 GRAY_CHROMA_TH가 계약 미해결이라 보류)
 
 ## 변경 이력
 - v1 (a1fcc20 확정, 95365bb 구현 완료): 최초 버전
 - v2 (2e67b1b 확정, 구현 완료): color_mode 열 추가, manifest 해시 출력 추가 (9주차 회의 후속)
+- v3 (확정, 구현 전): gray 선택 열 검증, 흑백 실제의 train/val 배정 검사, gray 장수표 (흑백 규칙 11/26 합의, 계약 fc748cc)

@@ -1,6 +1,6 @@
 # SPEC-02: 베이스라인 학습
 
-- 상태: 구현 완료 (GenImage 대기)
+- 상태: 구현 완료 (GenImage 대기) — 보완 4 확정, 구현 전
 - 담당: 안승주
 - 관련 결정·실험: DECISIONS.md "모델 입력 규칙", "CIFAKE 입력 크기", "CIFAKE 알려진 한계", "로컬 개발 환경", "분할과 저장", SPEC-01a, SPEC-01b, EXP-001
 
@@ -28,6 +28,7 @@
    - `src/model/resume.py`: 재개 판단 순수 함수 (metrics 행 정리, best.pt 정합성, best 저장 여부, 재개 설정 비교. torch를 import하지 않음)
    - `src/model/run_log.py`: metrics.csv 열 정의와 읽기·쓰기 (torch를 import하지 않음)
    - `src/model/train.py`: 모델 생성, 학습 루프, 체크포인트, 로그 (torch 필요, Colab 실행)
+   - `src/model/select.py`: 학습 생성기 행 고르기 (torch를 import하지 않음, 보완 4)
    - `src/model/configs/*.json`
    - `notebooks/run_model.ipynb`에 학습 실행 칸
 2. 실행 결과 (`output_dir/{run_name}/`, `output_dir`은 안승주 소유 Drive의 `MyDrive/ai-image-detector-runs/`. GitHub에 올리지 않음)
@@ -135,6 +136,13 @@
 - [x] 지표: 정답이 한 라벨만 있으면 AP·ROC-AUC가 None이다
 - [x] 설정 파일에 필수 키가 빠지면 에러가 나고 빠진 키 이름이 출력된다
 - [x] resume.py: 정상 / last 후 best 전 끊김(복구) / 불일치(에러) 세 경우를 pytest로 확인한다
+- [ ] (보완 4) train_generators가 없는 설정은 지금과 같이 읽히고, select_train_rows(df, None, split)이 df를 그대로 돌려준다
+- [ ] (보완 4) 빈 목록, 중복, "real" 포함, 문자열이 아닌 값이 각각 ConfigError가 나고 이유가 출력된다
+- [ ] (보완 4) 생성기 3개(sd14, sd15, wukong) 테스트 manifest에서 ["sd14"]로 고르면 실제는 전부, 가짜는 sd14만 남는다 (train, val 각각)
+- [ ] (보완 4) 목록에 manifest에 없는 생성기가 있으면 그 이름이 담긴 에러가 난다
+- [ ] (보완 4) 같은 실제 origin_id가 original에 두 행(generator만 다름) 있으면 에러가 난다
+- [ ] (보완 4) 실제 행의 generator가 real이 아니면 에러가 난다
+- [ ] (보완 4) cifake_baseline.json으로 만든 설정이 기존 config.json과 check_resume_config에서 에러 없이 비교된다
 
 ### B. Colab CIFAKE 실행
 - [x] 학습 시작 로그의 manifest_sha256이 79e176eeb61bb024e6ffbc5163b5c84fa02f23daf74b9e39c2427086bcb3740c이다
@@ -152,6 +160,7 @@
 - [ ] 학습 입력이 256×256이고, 크롭 시작 좌표가 8의 배수임을 배치 하나에서 로그로 확인한다
 - [ ] B의 체크포인트·로그 항목이 GenImage에서도 같게 동작한다
 - [ ] docs/experiments/에 GenImage 베이스라인 실험 기록을 남긴다
+- [ ] (보완 4) 학습 시작 로그에서 train·val 가짜가 train_generators의 생성기뿐이고, 표의 장수가 manifest에서 직접 센 값과 같다
 
 A·B가 끝나고 C만 남으면 상태를 "구현 완료 (GenImage 대기)"로 둔다.
 
@@ -178,6 +187,9 @@ A·B가 끝나고 C만 남으면 상태를 "구현 완료 (GenImage 대기)"로 
 - CNNDetection 공개 가중치로 평가만 하기 (학습 없음) → 별도 스펙 후보. 그 가중치가 학습에 쓴 증강 조건(블러·JPEG 비율 등) 확인이 먼저 필요하다
 - 하이퍼파라미터 탐색 (이 스펙은 위 값으로 한 번 학습)
 - 좌우 반전 등 압축 외 증강
+- 생성기 구성과 학습 생성기 결정 (계약 합의 후 확인)
+- real:fake 불균형 보정 (가중치, 샘플링)
+- 학습에 쓰지 않는 생성기의 train/val 행 처리 (이상진님 영역, 미해결 9)
 
 ## 미해결
 1. 평가 시 한 변이라도 256보다 작은 이미지 처리: 제외 / 에러 / 별도 표시 중 결정 필요 (GenImage 실제 해상도 분포를 본 뒤)
@@ -188,6 +200,8 @@ A·B가 끝나고 C만 남으면 상태를 "구현 완료 (GenImage 대기)"로 
 6. 좌우 반전 사용 여부: 확정됨 (쓰지 않음, 본문 1절)
 7. 실행 결과 저장 위치: 확정됨 (`MyDrive/ai-image-detector-runs/`, 출력 절)
 8. CIFAKE zip의 Drive 업로드 방식 (SPEC-01b 미해결 1, 이상진님 답변 대기). B 묶음 실행 전에 필요
+9. 학습에 쓰지 않는 생성기의 train/val 행: 계약대로 generator별 70/15/15이면 SD v1.5·Wukong의 85%가 쓰이지 않고, 교차 test는 생성기당 15%만 된다. 그대로 둘지, 교차 생성기는 전부 test로 둘지 (계약 합의 후 확인, 데이터 영역). 구현은 막지 않고 C 단계 전에 정한다
+10. 계약 "모델 측 입력 규칙"의 좌우 반전·테스트 512 전체는 본문 1절(반전 안 씀, 평가 중앙 크롭 256)과 충돌 (계약 합의 후 확인). 반전을 쓰기로 하면 GenImage 학습 전에 1절을 고쳐 다시 확정한다
 
 ## 확정 후 보완 (2026-11-18, 동작·완료 기준 변경 없음)
 - 설정 파일 읽기와 필수 키 검사는 `src/model/config.py`에 둔다. train.py는 torch를 import해 로컬에서 테스트할 수 없으므로 분리했다 (출력 절에 반영).
@@ -250,3 +264,38 @@ B-실행에서 본문과 다르게 진행한 실행 절차를 기록한다. 학�
    - B5: cifake_resume_test2 (epochs 3)
    - B6: cifake_resume_test (epochs 3, 완료된 상태에서 시험). lr 변경, manifest 로컬 사본 끝에 빈 줄 추가(해시만 변경)
    - 이 run들의 수치는 실험 결과로 쓰지 않는다 (EXP-001).
+
+## 확정 후 보완 4 (2026-11-27, 학습 생성기 선택, 동작 변경 있음)
+GenImage는 split을 generator별로 층화해서, 학습하지 않을 생성기(교차 평가용)에도 train/val 행이 생긴다.
+source로만 거르면 모든 생성기를 학습하게 되고, best.pt를 고르는 val에 교차 생성기가 섞여
+교차 생성기 평가가 성립하지 않는다. 이를 막기 위해 학습 생성기를 설정으로 지정한다.
+
+1. 설정 키 train_generators (선택 키, config.py)
+   - 값: 생성기 이름 문자열 목록. 예: ["sd14"] (GenImage 생성기 구성은 계약 합의 후 확인)
+   - 키가 없으면 지금과 같게 동작한다 (source·original·split으로만 거름).
+     cifake_baseline.json은 바꾸지 않으므로 기존 config.json과 재개 검사 결과가 그대로다.
+   - 키가 있으면 config.py에서 형식을 검사한다. 어기면 ConfigError:
+     빈 목록, 문자열이 아닌 값, 빈 문자열, 중복, "real" 포함
+
+2. 행 고르기 (src/model/select.py, 새 파일, torch를 import하지 않음)
+   - select_train_rows(df, train_generators, split) → 고른 df
+     - 실제(label == real): 전부 사용 (공유 실제 세트)
+     - 가짜(label == fake): generator가 train_generators에 있는 행만
+     - train_generators가 None이면 df를 그대로 돌려준다
+   - 검사 (어기면 에러, 생성기 이름과 split 출력):
+     a. train_generators의 각 생성기가 이 split에서 가짜 행 0개 → 에러 (오타로 가짜 없이 학습하는 것을 막음)
+     b. 실제 행의 generator가 "real"이 아닌 값 → 에러 (계약: 실제는 generator=real)
+     c. 고른 행에서 origin_id 또는 path가 두 번 이상 나옴 → 에러
+        (original 조건은 원본당 1행이어야 함. 공유 실제 사진이 생성기마다 중복 등록된 경우를 잡음)
+   - train.py는 ManifestDataset을 지금처럼 만든 뒤, dataset.df를 이 함수의 결과로 바꾼다.
+     split 겹침 검사(validate)는 ManifestDataset 생성 때 전체 manifest에 이미 실행되므로 그대로다.
+   - 고른 결과 real:fake 장수가 다르면 경고만 하고 계속한다 (가중치 보정은 하지 않음. 생성기 2개 이상을 넣을 때 해당)
+
+3. 학습 시작 로그 추가 (6절)
+   - train_generators 값 (키가 없으면 "키 없음: 모든 생성기 사용")
+   - 고르기 전 split × generator × label 행 수표 (source·original 기준), 각 줄에 사용/제외 표시
+   - 고른 뒤 split별 label 행 수 (기존 로그와 같은 형식)
+   - 고른 뒤 split × label × gray 행 수 (흑백 가짜가 train/val에 얼마나 남았는지 확인용)
+
+알려진 한계: 검사 c는 origin_id나 path가 같을 때만 중복을 잡는다. 같은 사진이 다른 origin_id로 등록되면 잡지 못하며,
+이는 데이터 계약 규칙 11(내용 기반 중복 확인, 미확인)에 맡긴다.
