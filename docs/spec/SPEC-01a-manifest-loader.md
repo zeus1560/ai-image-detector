@@ -1,6 +1,6 @@
 # SPEC-01a: manifest 로더와 검증
 
-- 상태: 확정 (v3)
+- 상태: 구현 완료 (v3)
 - 담당: 안승주
 - 관련 결정·실험: docs/spec/data-contract.md, DECISIONS.md "SPEC-01 분리", "manifest 운영", "색상 모드"
 
@@ -98,16 +98,16 @@ split 간 origin_id 겹침을 학습 전에 자동으로 차단해서, 핵심 �
 - [x] load_manifest가 출력하는 sha256이 hashlib로 따로 계산한 파일 해시와 같고, 파일을 1바이트만 바꿔도 값이 달라진다
 - [x] ManifestDataset.manifest_sha256이 load_manifest가 출력한 값과 같다
 - [x] v1의 기존 테스트가 모두 그대로 통과한다 (테스트용 manifest에 color_mode 열 추가 외에는 변경 없이)
-- [ ] (v3) gray 열이 없는 manifest는 오류 없이 읽히고, 모든 행의 gray가 False이며, 로그에 "gray 열 없음"이 나온다
-- [ ] (v3) gray 열이 없는 manifest를 읽기 전후로 파일 sha256이 같다
-- [ ] (v3) gray가 'True'/'False'인 manifest를 읽으면 df["gray"]가 bool이고 값이 파일과 같다
-- [ ] (v3) gray 칸이 빈 행이 있으면 ManifestValidationError가 나고, 메시지에 "gray", 줄 번호, 빈 값이라는 표시가 있다 (False로 읽히지 않는다)
-- [ ] (v3) gray가 'true', 'TRUE', '1', ' True' 중 하나인 행이 있으면 각각 열 이름과 줄 번호가 담긴 허용값 에러가 난다
-- [ ] (v3) 빈 값과 허용값 밖 값이 함께 있으면 에러 하나에 두 위반이 모두 나온다
-- [ ] (v3) real·gray=True가 train(또는 val)에 있으면 ManifestValidationError가 나고 LeakageError는 아니다
-- [ ] (v3) real·gray=True가 test에만 있고 fake·gray=True가 train에 있는 manifest는 통과한다
-- [ ] (v3) summary의 label × split × gray 표에서 (real, test, True) 칸이 df로 직접 센 장수와 같다
-- [ ] (v3) v2의 기존 테스트가 모두 변경 없이 통과한다 (gray 열 없는 픽스처 그대로)
+- [x] (v3) gray 열이 없는 manifest는 오류 없이 읽히고, 모든 행의 gray가 False이며, 로그에 "gray 열 없음"이 나온다
+- [x] (v3) gray 열이 없는 manifest를 읽기 전후로 파일 sha256이 같다
+- [x] (v3) gray가 'True'/'False'인 manifest를 읽으면 df["gray"]가 bool이고 값이 파일과 같다
+- [x] (v3) gray 칸이 빈 행이 있으면 ManifestValidationError가 나고, 메시지에 "gray", 줄 번호, 빈 값이라는 표시가 있다 (False로 읽히지 않는다)
+- [x] (v3) gray가 'true', 'TRUE', '1', ' True' 중 하나인 행이 있으면 각각 열 이름과 줄 번호가 담긴 허용값 에러가 난다
+- [x] (v3) 빈 값과 허용값 밖 값이 함께 있으면 에러 하나에 두 위반이 모두 나온다
+- [x] (v3) real·gray=True가 train(또는 val)에 있으면 ManifestValidationError가 나고 LeakageError는 아니다
+- [x] (v3) real·gray=True가 test에만 있고 fake·gray=True가 train에 있는 manifest는 통과한다
+- [x] (v3) summary의 label × split × gray 표에서 (real, test, True) 칸이 df로 직접 센 장수와 같다
+- [x] (v3) v2의 기존 테스트가 모두 변경 없이 통과한다 (gray 열 없는 픽스처 그대로)
 
 ## 테스트 방법
 - 로컬 CPU: 테스트 안에서 임시 폴더에 8×8 크기의 가짜 이미지 몇 장과 작은 manifest CSV를 만들어 위 완료 기준을 확인한다.
@@ -129,4 +129,4 @@ split 간 origin_id 겹침을 학습 전에 자동으로 차단해서, 핵심 �
 ## 변경 이력
 - v1 (a1fcc20 확정, 95365bb 구현 완료): 최초 버전
 - v2 (2e67b1b 확정, 구현 완료): color_mode 열 추가, manifest 해시 출력 추가 (9주차 회의 후속)
-- v3 (확정, 구현 전): gray 선택 열 검증, 흑백 실제의 train/val 배정 검사, gray 장수표 (흑백 규칙 11/26 합의, 계약 fc748cc)
+- v3 (d6d7c14 확정, 구현 완료): gray 선택 열 검증, 흑백 실제의 train/val 배정 검사, gray 장수표 (흑백 규칙 11/26 합의, 계약 fc748cc)

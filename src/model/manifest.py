@@ -36,6 +36,14 @@ ALLOWED_VALUES = {
     "color_mode": {"RGB", "L", "CMYK"},
 }
 
+# 선택 열 gray (SPEC-01a v3): 값은 정확히 'True' / 'False' 문자열만 허용한다.
+# 공백 제거·대소문자 변환을 하지 않는다.
+GRAY_COLUMN = "gray"
+GRAY_ALLOWED = {"True", "False"}
+
+# 흑백 실제 사진이 있으면 안 되는 split (데이터 계약: train/val 흑백 실제는 컬러 reserve로 교체)
+NO_GRAY_REAL_SPLITS = {"train", "val"}
+
 # kakao, latest 출처는 test 전용 (data-contract.md 규칙 4)
 TEST_ONLY_SOURCES = {"kakao", "latest"}
 
@@ -68,12 +76,38 @@ def manifest_sha256(path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def _gray_problems(df: pd.DataFrame) -> list[str]:
+    """gray 열 값 검사 (SPEC-01a v3). 빈 값을 먼저 걸러 따로 보고하고, 나머지에서 허용값을 본다."""
+    values = df[GRAY_COLUMN]
+    # 1. 빈 값('' 또는 공백만): 문자열 비교보다 먼저 본다 (빈 값이 조용히 False가 되지 않게)
+    blank = values.str.strip() == ""
+    # 2. 빈 값이 아닌데 정확히 'True'/'False'가 아님
+    bad = ~blank & ~values.isin(GRAY_ALLOWED)
+
+    problems = []
+    if blank.any():
+        examples = ", ".join(f"{_csv_line(i)}번 줄" for i in values[blank].head(MAX_EXAMPLES).index)
+        problems.append(f"- 열 '{GRAY_COLUMN}'에 빈 값 {int(blank.sum())}개. 예: {examples}")
+    if bad.any():
+        examples = ", ".join(
+            f"{_csv_line(i)}번 줄='{v}'" for i, v in values[bad].head(MAX_EXAMPLES).items()
+        )
+        problems.append(
+            f"- 열 '{GRAY_COLUMN}'에 허용되지 않은 값 {int(bad.sum())}개 "
+            f"(허용값: {sorted(GRAY_ALLOWED)}, 공백·대소문자 변환 없음). 예: {examples}"
+        )
+    return problems
+
+
 def load_manifest(path, data_root) -> pd.DataFrame:
     """manifest CSV를 읽고 필수 열과 허용값(label, split, source, color_mode)을 확인한다.
 
     읽을 때 manifest 경로, 행 수, 파일의 sha256 해시를 출력한다.
     모든 값은 문자열로 읽는다 (origin_id 등이 숫자로 바뀌지 않게).
     data_root는 df.attrs["data_root"]에, 해시는 df.attrs["manifest_sha256"]에 기록해 둔다.
+
+    gray는 선택 열이다 (v3). 없으면 모든 행을 False로 채우고, 있으면 값이 정확히
+    'True'/'False'인지 검사한 뒤 bool로 바꾼다. df.attrs["gray_column"]에 "present"/"absent"를 기록한다.
     """
     # 바이트를 한 번만 읽어, 해시를 계산한 바로 그 내용을 파싱한다
     raw = Path(path).read_bytes()
@@ -98,11 +132,23 @@ def load_manifest(path, data_root) -> pd.DataFrame:
                 f"- 열 '{col}'에 허용되지 않은 값 {len(bad)}개 "
                 f"(허용값: {sorted(allowed)}). 예: {examples}"
             )
+    gray_present = GRAY_COLUMN in df.columns
+    if gray_present:
+        problems.extend(_gray_problems(df))
     if problems:
         raise ManifestValidationError(
             f"manifest 허용값 검사 실패 (파일: {path}, 줄 번호는 헤더=1 기준)\n"
             + "\n".join(problems)
         )
+
+    if gray_present:
+        df[GRAY_COLUMN] = df[GRAY_COLUMN] == "True"
+    else:
+        # 파일은 건드리지 않는다 (sha256 그대로). 메모리의 df에만 열을 채운다
+        df[GRAY_COLUMN] = False
+        print(f"gray 열 없음 → 전부 False (행 {len(df)}개)")
+    df[GRAY_COLUMN] = df[GRAY_COLUMN].astype(bool)
+    df.attrs["gray_column"] = "present" if gray_present else "absent"
 
     df.attrs["data_root"] = str(data_root)
     df.attrs["manifest_sha256"] = digest
@@ -114,14 +160,16 @@ def _file_exists(full_path: Path) -> bool:
 
 
 def validate(df: pd.DataFrame, data_root, check_files="all") -> None:
-    """데이터 계약 규칙 1~4를 모두 검사하고, 위반을 모아 하나의 에러로 보고한다.
+    """데이터 계약 규칙 1~5를 모두 검사하고, 위반을 모아 하나의 에러로 보고한다.
 
     1. 한 origin_id가 두 개 이상의 split에 존재 (누수)
     2. 한 origin_id 안에서 label이 다름
     3. source가 kakao 또는 latest인데 split이 test가 아님
     4. path가 가리키는 파일이 없음 (check_files="all" 전체, 정수 n이면 n개 샘플)
+    5. label == real, gray == True인데 split이 train 또는 val (v3)
 
     1번 위반이 있으면 LeakageError, 없으면 ManifestValidationError를 낸다.
+    df는 load_manifest가 돌려준 것이어야 한다 (gray 열이 bool로 들어 있음).
     """
     data_root = Path(data_root)
     violations = []
@@ -186,6 +234,26 @@ def validate(df: pd.DataFrame, data_root, check_files="all") -> None:
         )
     log.append(f"{log_files}, 없는 파일 {len(missing_paths)}개")
 
+    # 5. 흑백 실제 사진이 train/val에 남아 있음 (v3. 흑백 가짜는 위반 아님)
+    gray = df[GRAY_COLUMN]
+    is_real = df["label"] == "real"
+    bad_gray = df[is_real & gray & df["split"].isin(NO_GRAY_REAL_SPLITS)]
+    if len(bad_gray):
+        examples = ", ".join(
+            f"{_csv_line(i)}번 줄(split={r.split}, {r.path})"
+            for i, r in bad_gray.head(MAX_EXAMPLES).iterrows()
+        )
+        violations.append(
+            f"[5] 흑백 실제(label=real, gray=True)인데 split이 train/val인 행 {len(bad_gray)}개. 예: {examples}"
+        )
+    log.append(f"train/val 흑백 실제 {len(bad_gray)}개")
+    n_gray_real_test = int((is_real & gray & (df["split"] == "test")).sum())
+    fake_gray = df[(df["label"] == "fake") & gray]
+    fake_counts = " / ".join(
+        f"{s} {int((fake_gray['split'] == s).sum())}장" for s in ("train", "val", "test")
+    )
+    log.append(f"흑백 행: 실제 test {n_gray_real_test}장, 가짜 {fake_counts}")
+
     if violations:
         error_cls = LeakageError if overlap_ids else ManifestValidationError
         raise error_cls(
@@ -197,9 +265,16 @@ def validate(df: pd.DataFrame, data_root, check_files="all") -> None:
         print(f"  - {line}")
 
 
+def gray_count_table(df: pd.DataFrame) -> pd.DataFrame:
+    """label × split × gray 장수표 (v3). 행: (label, split), 열: False, True."""
+    table = pd.crosstab([df["label"], df["split"]], df[GRAY_COLUMN])
+    return table.reindex(columns=[False, True], fill_value=0)
+
+
 def summary(df: pd.DataFrame) -> pd.DataFrame:
     """label × condition × split 장수표를 출력하고 반환한다.
 
+    그 다음 label × split × gray 장수표를 출력한다 (v3, 반환값은 바꾸지 않음).
     original 조건에서 label별 format·크기 분포를 출력하고,
     label 사이에 분포가 다르면 경고만 한다 (멈추지 않는다).
     """
@@ -208,6 +283,9 @@ def summary(df: pd.DataFrame) -> pd.DataFrame:
     )
     print("[장수표] label × condition × split")
     print(table.to_string())
+
+    print("[장수표] label × split × gray")
+    print(gray_count_table(df).to_string())
 
     original = df[df["condition"] == "original"]
     if len(original) == 0:
