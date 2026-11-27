@@ -7,7 +7,10 @@ torch가 필요 없는 로직은 config.py, transforms.py(CropWrapper), run_log.
 로컬 pytest로 확인한다.
 
 출력 (output_dir/run_name/)
-- config.json: 설정 + manifest_sha256 + git 커밋 해시 + torch·torchvision 버전 + GPU 이름 (처음 실행에서만 저장)
+- config.json: 설정 + manifest_sha256 + git 커밋 해시 + torch·torchvision 버전 + GPU 이름
+  + Pillow·libjpeg 버전 (SPEC-04) (처음 실행에서만 저장)
+
+설정에 augment 키가 있으면 train에 JPEG 압축 증강을 적용한다 (SPEC-04). 없으면 SPEC-02와 같다.
 - metrics.csv: epoch별 지표 (run_log.py 형식)
 - last.pt: 모델, 옵티마이저, epoch, 난수 상태 (매 epoch 끝)
 - best.pt: val_loss 최소 epoch의 모델, epoch, val_loss
@@ -27,6 +30,8 @@ import traceback
 from pathlib import Path
 
 import numpy as np
+import PIL
+import PIL.features
 import torch
 import torchvision
 from torch import nn
@@ -37,10 +42,10 @@ from torchvision.models import ResNet50_Weights, resnet50
 from . import resume as rs
 from . import run_log
 from . import select as sel
-from .config import TRAIN_GENERATORS_KEY, load_config
+from .config import AUGMENT_KEY, TRAIN_GENERATORS_KEY, load_config
 from .dataset import LABEL_TO_INDEX, ManifestDataset
 from .metrics import average_precision, label_metrics, roc_auc
-from .transforms import CropWrapper
+from .transforms import CropWrapper, jpeg_plan_stats
 
 # ImageNet 정규화 값 (SPEC-02 1절). ResNet50_Weights.IMAGENET1K_V1.transforms()는
 # 리사이즈·중앙 크롭이 들어 있어 쓰지 않는다
@@ -150,6 +155,9 @@ def env_info() -> dict:
         "torch_version": torch.__version__,
         "torchvision_version": torchvision.__version__,
         "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        # SPEC-04 출력 2 (보완 1-1): JPEG 재압축 결과를 좌우하는 라이브러리 버전
+        "pillow_version": PIL.__version__,
+        "libjpeg_version": PIL.features.version("jpg"),
     }
     assert tuple(info) == rs.ENV_KEYS
     return info
@@ -190,6 +198,7 @@ def build_datasets(config: dict):
     """
     to_tensor = T.Compose([T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
     train_generators = config.get(TRAIN_GENERATORS_KEY)
+    augment = config.get(AUGMENT_KEY)  # SPEC-04: 키가 없으면 None (증강 없음)
     datasets, before = {}, {}
     for split, mode in (("train", "train"), ("val", "eval")):
         base = ManifestDataset(
@@ -202,7 +211,14 @@ def build_datasets(config: dict):
         )
         before[split] = base.df
         base.df = sel.select_train_rows(base.df, train_generators, split)
-        datasets[split] = CropWrapper(base, config["crop_size"], mode, config["seed"], to_tensor)
+        datasets[split] = CropWrapper(
+            base,
+            config["crop_size"],
+            mode,
+            config["seed"],
+            to_tensor,
+            augment=augment if split == "train" else None,  # val은 압축하지 않는다 (SPEC-04 3절)
+        )
     return datasets, before
 
 
@@ -263,6 +279,23 @@ def evaluate(model, loader, criterion, device) -> dict:
     out["val_ap"] = average_precision(y_true, scores)
     out["val_auc"] = roc_auc(y_true, scores)
     return out
+
+
+def jpeg_stats_lines(train_ds, config: dict, epoch: int) -> list[str]:
+    """이번 epoch train 행 전체의 label별 압축 계획 통계 로그 (SPEC-04 4절, 이미지를 열지 않음)."""
+    df = train_ds.dataset.df
+    stats = jpeg_plan_stats(config["seed"], epoch, df.index, df["label"], config.get(AUGMENT_KEY))
+    lines = []
+    for label, s in stats.items():
+        if s["applied"]:
+            q = f"품질 평균 {s['q_mean']:.2f}, 최소 {s['q_min']}, 최대 {s['q_max']}"
+        else:
+            q = "품질 없음 (압축된 행 없음)"
+        lines.append(
+            f"[epoch {epoch} 압축 계획] {label}: {s['applied']}/{s['count']} 적용 "
+            f"(비율 {s['ratio']:.4f}), {q}"
+        )
+    return lines
 
 
 def _fmt(value) -> str:
@@ -371,6 +404,10 @@ def run(config: dict) -> None:
         print("경고: GPU 없음, CPU로 학습합니다 (Colab 런타임 유형을 확인하세요)")
         print("!" * 60)
     print("실행 환경:", json.dumps(env, ensure_ascii=False))
+    # SPEC-04 4절: augment 설정과 Pillow·libjpeg 버전
+    augment = config.get(AUGMENT_KEY)
+    print("augment:", json.dumps(augment, ensure_ascii=False) if augment is not None else "augment 없음")
+    print(f"Pillow {env['pillow_version']}, libjpeg {env['libjpeg_version']}")
 
     model = build_model(config).to(device)
     criterion = nn.BCEWithLogitsLoss()
@@ -386,6 +423,10 @@ def run(config: dict) -> None:
     val_loader = build_loader(datasets["val"], config, shuffle=False)
 
     for epoch in range(last_epoch + 1, config["epochs"] + 1):
+        # 압축 계획 통계는 epoch_seconds(압축 비용 비교용, SPEC-04 C)에 섞이지 않게 시간 측정 전에 낸다
+        if augment is not None:
+            for line in jpeg_stats_lines(datasets["train"], config, epoch):
+                print(line)
         start = time.time()
         datasets["train"].set_epoch(epoch)
         generator.manual_seed(epoch_generator_seed(config["seed"], epoch))

@@ -101,18 +101,22 @@ X와 Y의 정의는 SPEC-03(목적, 보완 2-4)을 그대로 따른다.
 ## 완료 기준
 
 ### A. 로컬 pytest (CPU, torch 없이)
-- [ ] config: augment 키가 없는 설정은 지금과 같게 읽히고, cifake_baseline.json으로 만든 설정이 기존 config.json과 check_resume_config에서 에러 없이 비교된다
-- [ ] config: jpeg_prob 범위 밖(-0.1, 1.1), 품질이 정수가 아님, min > max, 1~100 밖, 키 누락, 모르는 키가 각각 ConfigError이고 이유가 출력된다
-- [ ] jpeg_plan: 같은 (seed, epoch, row_index)로 두 번 부르면 같은 결과이고, 호출 순서를 섞어도 같다
-- [ ] jpeg_plan: row 10,000개에서 적용 비율이 jpeg_prob=0.5 기준 0.47~0.53 안이고, 품질이 모두 30~95 안이며 30과 95가 모두 한 번 이상 나온다
-- [ ] jpeg_plan: jpeg_prob=0이면 모두 None, 1이면 모두 품질 값이다
-- [ ] jpeg_plan: epoch만 바꾸면 결과가 달라지는 row가 있다
-- [ ] jpeg_recompress: 512×512 RGB 입력의 출력이 512×512 RGB이고, 품질 30 결과가 품질 95 결과보다 원본과의 평균 절대 차이가 크다
-- [ ] CropWrapper(train, augment 있음)와 CropWrapper(train, augment 없음)의 크롭 좌표가 같은 (seed, epoch, row_index)에서 같다
-- [ ] CropWrapper(train, jpeg_prob=1): 출력이 "512 전체를 jpeg_recompress → 같은 좌표로 크롭"한 결과와 픽셀 단위로 같다 (압축 후 크롭 순서 확인)
-- [ ] CropWrapper(eval, augment 있음)는 압축하지 않는다 (augment 없는 eval 출력과 픽셀 단위로 같음)
-- [ ] check_same_setup: run_name·augment만 다름(통과) / 커밋·버전만 다름(경고) / seed 다름(에러) / manifest_sha256 다름(에러) / train_generators 다름(에러)
-- [ ] 기존 테스트가 모두 통과한다
+- [x] config: augment 키가 없는 설정은 지금과 같게 읽히고, cifake_baseline.json으로 만든 설정이 기존 config.json과 check_resume_config에서 에러 없이 비교된다
+- [x] config: jpeg_prob 범위 밖(-0.1, 1.1), 품질이 정수가 아님, min > max, 1~100 밖, 키 누락, 모르는 키가 각각 ConfigError이고 이유가 출력된다
+- [x] jpeg_plan: 같은 (seed, epoch, row_index)로 두 번 부르면 같은 결과이고, 호출 순서를 섞어도 같다
+- [x] jpeg_plan: row 10,000개에서 적용 비율이 jpeg_prob=0.5 기준 0.47~0.53 안이고, 품질이 모두 30~95 안이며 30과 95가 모두 한 번 이상 나온다
+- [x] jpeg_plan: jpeg_prob=0이면 모두 None, 1이면 모두 품질 값이다
+- [x] jpeg_plan: epoch만 바꾸면 결과가 달라지는 row가 있다
+- [x] jpeg_plan_stats (보완 1-2): 같은 row_indices에서 labels만 바꿔도 각 행의 계획이 같다
+- [x] jpeg_plan_stats (보완 1-2): 손으로 만든 예시에서 label별 통계가 손 계산 값과 같다
+- [x] jpeg_recompress: 512×512 RGB 입력의 출력이 512×512 RGB이고, 품질 30 결과가 품질 95 결과보다 원본과의 평균 절대 차이가 크다
+- [x] CropWrapper(train, augment 있음)와 CropWrapper(train, augment 없음)의 크롭 좌표가 같은 (seed, epoch, row_index)에서 같다
+- [x] CropWrapper(train, jpeg_prob=1): 출력이 "512 전체를 jpeg_recompress → 같은 좌표로 크롭"한 결과와 픽셀 단위로 같다 (압축 후 크롭 순서 확인)
+- [x] CropWrapper(eval, augment 있음)는 압축하지 않는다 (augment 없는 eval 출력과 픽셀 단위로 같음)
+- [x] check_same_setup: run_name·augment만 다름(통과) / num_workers만 다름(통과, 보완 1-3) / 커밋·버전만 다름(경고) / seed 다름(에러) / manifest_sha256 다름(에러) / train_generators 다름(에러)
+- [x] 기존 테스트가 모두 통과한다
+
+A 확인 (2026-11-28, 로컬 Windows CPU, Pillow 13.0.0, libjpeg 8.0): `python -m pytest src/model/tests -q` → 235 passed (기존 189 + test_augment.py 46). train.py는 import하지 않고 `py_compile`로 문법만 확인.
 
 ### B. Colab CIFAKE 파이프라인 확인 (수치는 쓰지 않음)
 CIFAKE는 압축 실험에 쓰지 않는다 (DECISIONS "CIFAKE의 역할"). 코드가 GPU 환경에서 도는지만 본다.

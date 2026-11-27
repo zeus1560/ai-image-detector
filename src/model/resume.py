@@ -101,7 +101,15 @@ def is_new_best(rows, epoch: int) -> bool:
 
 
 # config.json에서 실행 환경 키: 다르면 경고만 한다
-ENV_KEYS = ("git_commit", "torch_version", "torchvision_version", "gpu_name")
+# pillow_version, libjpeg_version은 SPEC-04 보완 1-1에서 추가 (두 키가 없는 기존 config.json은 경고 2줄)
+ENV_KEYS = (
+    "git_commit",
+    "torch_version",
+    "torchvision_version",
+    "gpu_name",
+    "pillow_version",
+    "libjpeg_version",
+)
 # 다르면 에러인 데이터 키 (설정 키와 함께 검사)
 MANIFEST_KEY = "manifest_sha256"
 
@@ -112,7 +120,7 @@ def check_resume_config(saved: dict, current: dict) -> list[str]:
     """config.json(saved)과 이번 실행 값(current)을 비교한다.
 
     - 설정 키나 manifest_sha256이 다르면(한쪽에만 있는 키 포함) ResumeError, 다른 키 이름을 출력한다.
-    - ENV_KEYS(git 커밋, torch·torchvision 버전, GPU 이름)가 다르면 경고 문자열 목록을 돌려준다.
+    - ENV_KEYS(git 커밋, torch·torchvision·Pillow·libjpeg 버전, GPU 이름)가 다르면 경고 문자열 목록을 돌려준다.
     """
     keys = [k for k in dict.fromkeys([*saved, *current]) if k not in ENV_KEYS]
     differ = [k for k in keys if saved.get(k, _MISSING) != current.get(k, _MISSING)]

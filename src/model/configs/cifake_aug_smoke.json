@@ -1,0 +1,17 @@
+{
+  "run_name": "cifake_aug_smoke",
+  "manifest_path": "/content/data/cifake_manifest.csv",
+  "data_root": "/content/data",
+  "source": "cifake",
+  "crop_size": null,
+  "model": "resnet50",
+  "pretrained": true,
+  "epochs": 1,
+  "batch_size": 64,
+  "lr": 1e-4,
+  "weight_decay": 0,
+  "seed": 42,
+  "num_workers": 2,
+  "output_dir": "/content/drive/MyDrive/ai-image-detector-runs",
+  "augment": {"jpeg_prob": 0.5, "jpeg_quality_min": 30, "jpeg_quality_max": 95}
+}
