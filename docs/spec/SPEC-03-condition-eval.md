@@ -118,7 +118,7 @@ split 겹침 검사는 한 manifest 안에서만 보므로 이것을 잡지 못�
 - [x] (보완 2) train_generators=["g1"]이면 g1 행이 yes, g2 행이 no이고, 키가 없으면 빈칸이다
 - [x] (보완 2) drop.csv의 generator 행 하락이 손 계산 값과 같다 (kakao 연결·전체 두 방식 모두)
 - [x] (보완 2) (source, condition) 안에서 origin_id가 중복되면 에러가 난다
-- [x] (보완 2) 기존 SPEC-03 A 테스트는 열 추가에 맞춘 기대값 수정 외에는 그대로 통과한다
+- [x] (보완 2) 기존 SPEC-03 A 테스트는 열 추가에 맞춘 기대값 수정 외에는 그대로 통과한다 (보완 2-c·4에 따른 생성기 행 기대값 변경은 승인 후 반영)
 
 ### B. Colab CIFAKE 실행 (cifake_baseline best.pt)
 - [x] split=val 평가의 정확도·오탐률·미탐률이 metrics.csv의 best epoch(2) 값과 같다 (같은 체크포인트·같은 데이터. 다르면 몇 장이 다른지와 그 이미지의 로짓을 기록하고 원인을 확인한다. AP·ROC-AUC는 1e-4 이내)
@@ -126,7 +126,10 @@ split 겹침 검사는 한 manifest 안에서만 보므로 이것을 잡지 못�
 - [x] summary.csv에 (cifake, original) 행이 있고, AP·ROC-AUC가 같은 predictions.csv로 sklearn 계산값과 같다
 - [x] 같은 eval_name으로 다시 실행하면 에러가 나고 기존 결과 파일이 바뀌지 않는다
 - [x] docs/experiments/에 기록을 남긴다 (CIFAKE 결과는 발표 수치로 쓰지 않는다)
-- [ ] (보완 2) EXP-002의 test predictions.csv(예전 형식)로 summary를 다시 만들면 condition 행 값이 EXP-002 기록과 같다
+- [x] (보완 2) EXP-002의 test predictions.csv(예전 형식)로 summary를 다시 만들면 condition 행 값이 EXP-002 기록과 같다
+  - 확인 (2026-11-28, 실행 커밋 28698a0, T4): 공통 열 19개 중 다른 열 0개. 정확도 0.9695, 오탐 247, 미탐 363, AP 0.995698, AUC 0.995733. 로그 "gray 열 없는 예전 파일 → gray 전부 False (행 20000개)" 확인
+  - evaluate.py 첫 실행: 새 형식(gray 열) predictions.csv, 예전 형식으로 다시 만든 summary(위 줄)와 condition·generator 행 다른 열 0개, 20,000행 logit 최대 차이 0
+  - 평가 폴더 이름은 cifake_baseline_eval_test_dfa5787이지만 실행 커밋은 28698a0이다 (두 커밋 사이 evaluate.py·eval_report.py 변경 없음. 함께 바뀐 train.env_info는 기록 키 2개(pillow_version, libjpeg_version)만 추가되고, eval 모드 CropWrapper는 augment 없이 호출되어 동작이 같음)
 
 ### C. Colab GenImage 실행 (manifest.csv 준비 후)
 - [ ] val과 test 각각에서 original, jpeg90/75/50/30, resize50 그룹이 summary.csv에 있고, 각 그룹의 n_real·n_fake가 manifest 요약표와 같다

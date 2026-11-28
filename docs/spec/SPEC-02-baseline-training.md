@@ -143,6 +143,8 @@
 - [x] (보완 4) 같은 실제 origin_id가 original에 두 행(generator만 다름) 있으면 에러가 난다
 - [x] (보완 4) 실제 행의 generator가 real이 아니면 에러가 난다
 - [x] (보완 4) cifake_baseline.json으로 만든 설정이 기존 config.json과 check_resume_config에서 에러 없이 비교된다
+  - 보강 확인 (2026-11-28, 실행 커밋 28698a0, T4): Drive의 실제 cifake_baseline/config.json으로 check_resume_config 에러 없음, 경고 3줄(git_commit, pillow_version, libjpeg_version)
+  - train 시작 로그 확인(epochs=0, run_name을 바꾼 임시 설정으로 /content/tmp_runs에 저장 후 정상 종료. cifake_baseline.json과 Drive의 cifake_baseline 기록은 바꾸지 않음): "train_generators: 키 없음: 모든 생성기 사용", gray=True 0, "augment 없음"
 
 ### B. Colab CIFAKE 실행
 - [x] 학습 시작 로그의 manifest_sha256이 79e176eeb61bb024e6ffbc5163b5c84fa02f23daf74b9e39c2427086bcb3740c이다

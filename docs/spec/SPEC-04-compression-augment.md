@@ -123,7 +123,7 @@ CIFAKE는 압축 실험에 쓰지 않는다 (DECISIONS "CIFAKE의 역할"). 코�
 - [ ] cifake_aug_smoke (cifake_baseline + augment, epochs 1)이 끝까지 돌고, 시작 로그에 augment 설정과 Pillow·libjpeg 버전이 나온다
 - [ ] epoch 로그에 label별 압축 적용 비율·품질 통계가 나오고, real과 fake 값이 비슷하다 (값은 로그에서 옮겨 적는다)
 - [ ] config.json에 Pillow·libjpeg 버전이 저장된다
-- [ ] 노트북 설정 비교 칸에서 cifake_baseline과 비교하면 run_name·augment·epochs가 다르다고 에러가 난다 (smoke는 epochs가 다르므로 에러가 정상)
+- [ ] 노트북 설정 비교 칸에서 cifake_baseline과 비교하면 epochs가 다르다고 에러가 난다 (run_name·augment는 달라도 되는 키). 기록용 키는 경고만 (smoke는 epochs가 다르므로 에러가 정상)
 
 ### C. Colab GenImage 실행 (manifest.csv와 genimage_baseline 학습 후)
 - [ ] 학습 시작 전 check_same_setup(genimage_baseline, genimage_aug)이 에러 없이 통과한다
